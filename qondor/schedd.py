@@ -89,6 +89,7 @@ class ScheddManager(object):
             logger.error('Failed to collect any schedds from %s', self.remote_pool)
             raise RuntimeError
         logger.debug('Found schedd ads %s', self.schedd_ads)
+        return self.schedd_ads
 
     @cache_return_value
     def get_best_schedd(self):
