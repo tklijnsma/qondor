@@ -10,6 +10,7 @@ BATCHMODE = False
 if 'QONDOR_BATCHMODE' in os.environ:
     BATCHMODE = True
 
+from . import schedd
 from .schedd import get_best_schedd, get_schedd_ads, wait
 from .preprocess import Preprocessor
 from .submit import SHFile, Submitter

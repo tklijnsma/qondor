@@ -118,9 +118,7 @@ class ScheddManager(object):
 
 
 # Convenience functions
-
 GLOBAL_SCHEDDMAN = ScheddManager()
-
 def _get_scheddman(renew):
     global GLOBAL_SCHEDDMAN
     if renew: GLOBAL_SCHEDDMAN.clear_cache()
@@ -134,7 +132,6 @@ def get_schedd_ads(renew=False):
 
 def get_schedds(renew=False):
     return _get_scheddman(renew).get_all_schedds()
-
 
 
 def get_jobs(cluster_id, proc_id=None):
