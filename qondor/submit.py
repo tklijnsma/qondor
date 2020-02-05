@@ -184,6 +184,7 @@ class Submitter(object):
                 with schedd.transaction() as transaction:
                     ad = []
                     cluster_id = submit_object.queue(transaction, njobs, ad)
+                    logger.debug('submit_object.queue returned: %s', cluster_id)
         return cluster_id
 
 
