@@ -107,7 +107,7 @@ class Preprocessor(object):
             logger.error('line "%s" did not have expected structure', line)
             raise
         if qondor.BATCHMODE:
-            logger.debug('BATCHMODE: %s --> %s'. path, osp.basename(path))
+            logger.debug('BATCHMODE: %s --> %s', path, osp.basename(path))
             path = osp.basename(path)
         logger.debug('file[%s] = %s', key, path)
         self.files[key] = path

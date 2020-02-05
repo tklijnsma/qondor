@@ -165,7 +165,7 @@ class Submitter(object):
             }
 
         # Flatten files in a string
-        transfer_files = self.transfer_files + self.preprocessing.files.values(),
+        transfer_files = self.transfer_files + self.preprocessing.files.values()
         if len(transfer_files) > 0:
             sub['transfer_input_files'] = ','.join(transfer_files)
 
