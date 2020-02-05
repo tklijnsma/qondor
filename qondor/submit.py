@@ -183,8 +183,8 @@ class Submitter(object):
                 submit_object = htcondor.Submit(sub)
                 with schedd.transaction() as transaction:
                     ad = []
-                    submit_object.queue(transaction, njobs, ad)
-        return ad
+                    cluster_id = submit_object.queue(transaction, njobs, ad)
+        return cluster_id
 
 
 def htcondor_format_environment(env):

@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import qondor
 import logging, re
+from time import sleep
 logger = logging.getLogger('qondor')
 
 
@@ -96,6 +97,10 @@ class ScheddManager(object):
         schedd = htcondor.Schedd(best_schedd_ad)
         return schedd
 
+    @cache_return_value
+    def get_all_schedds(self):
+        return [ htcondor.Schedd(schedd_ad) for schedd_ad in self.get_schedd_ads() ]
+
     def get_schedd_weight(self, schedd_ad):
         duty_cycle = schedd_ad['RecentDaemonCoreDutyCycle'] * 100
         occupancy = (schedd_ad['ShadowsRunning'] / schedd_ad['MaxJobsRunning']) * 100
@@ -110,13 +115,46 @@ class ScheddManager(object):
 
 
 # Convenience functions
-def get_best_schedd(renew=False):
+
+def _get_scheddman(renew):
     scheddman = ScheddManager()
     if renew: scheddman.clear_cache()
-    return scheddman.get_best_schedd()
+    return scheddman    
+
+def get_best_schedd(renew=False):
+    return _get_scheddman(renew).get_best_schedd()
 
 def get_schedd_ads(renew=False):
-    scheddman = ScheddManager()
-    if renew: scheddman.clear_cache()
-    return scheddman.get_schedd_ads()
+    return _get_scheddman(renew).get_schedd_ads()
 
+def get_schedds(renew=False):
+    return _get_scheddman(renew).get_all_schedds()
+
+
+
+def get_jobs(cluster_id, proc_id=None):
+    requirements = 'ClusterId=={0}'.format(cluster_id)
+    if not(proc_id is None): requirements += ' && ProcId == {0}'.format(proc_id)
+    classads = []
+    for schedd in get_schedds():
+        classads.extend(list(schedd.xquery(
+            requirements = requirements,
+            projection = ['ProcId', 'JobStatus']
+            )))
+    logger.info('Query returned %s', classads)
+    return classads
+
+def wait(cluster_id, proc_id=None, n_sleep=10):
+    while True:
+        states = [j['JobStatus'] for j in get_jobs(cluster_id, proc_id)]
+        is_done = [ not(state in [1, 2]) for state in states ]
+        if is_done:
+            logger.info('ClusterId %s ProcId %s seems done', cluster_id, proc_id)
+            break
+        else:
+            logger.info(
+                'ClusterId %s ProcId %s not yet done:\n%s',
+                cluster_id, proc_id, states
+                )
+            logger.info('Sleeping for %s seconds before checking again', n_sleep)
+            sleep(n_sleep)
