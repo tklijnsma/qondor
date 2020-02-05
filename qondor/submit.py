@@ -158,6 +158,7 @@ class Submitter(object):
             'output' : 'out_$(Cluster)_$(Process).txt',
             'error' : 'err_$(Cluster)_$(Process).txt',
             'log' : 'log_$(Cluster)_$(Process).txt',
+            'should_transfer_files' : 'YES',
             'x509userproxy' : '/uscms/home/{0}/x509up_u55957'.format(os.environ['USER']),
             'executable': osp.basename(self.shfile),
             '+QondorRundir' : '"' + self.rundir + '"',
