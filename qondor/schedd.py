@@ -103,6 +103,7 @@ class ScheddManager(object):
 
     @cache_return_value
     def get_all_schedds(self):
+        import htcondor
         return [ htcondor.Schedd(schedd_ad) for schedd_ad in self.get_schedd_ads() ]
 
     def get_schedd_weight(self, schedd_ad):
