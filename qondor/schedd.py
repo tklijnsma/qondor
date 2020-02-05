@@ -140,6 +140,7 @@ def get_jobs(cluster_id, proc_id=None):
     requirements = 'ClusterId=={0}'.format(cluster_id)
     if not(proc_id is None): requirements += ' && ProcId == {0}'.format(proc_id)
     classads = []
+    logger.debug('requirements = %s', requirements)
     for schedd in get_schedds():
         classads.extend(list(schedd.xquery(
             requirements = requirements,
