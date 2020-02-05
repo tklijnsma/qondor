@@ -160,7 +160,7 @@ class Submitter(object):
             'log' : 'log_$(Cluster)_$(Process).txt',
             'x509userproxy' : '/uscms/home/{0}/x509up_u55957'.format(os.environ['USER']),
             'executable': osp.basename(self.shfile),
-            '+QondorRundir' : self.rundir,
+            '+QondorRundir' : '"' + self.rundir + '"',
             'environment' : {
                 'CONDOR_CLUSTER_NUMBER' : '$(Cluster)',
                 'CONDOR_PROCESS_ID' : '$(Process)',
