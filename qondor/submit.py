@@ -178,7 +178,7 @@ class Submitter(object):
         if not self.dry:
             import htcondor
             schedd = qondor.get_best_schedd()
-            with qondor.switchdir(self.rundir):
+            with qondor.utils.switchdir(self.rundir):
                 submit_object = htcondor.Submit(sub)
                 with schedd.transaction() as transaction:
                     ad = []
