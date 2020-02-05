@@ -181,7 +181,7 @@ class Submitter(object):
             submit_object = htcondor.Submit(sub)
             with schedd.transaction() as transaction:
                 ad = []
-                sub.queue(transaction, njobs, ad)
+                submit_object.queue(transaction, njobs, ad)
                 return ad
 
 
