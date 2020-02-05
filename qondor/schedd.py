@@ -19,7 +19,10 @@ def cache_return_value(func):
             wrapper.cached_return_value = func(*args, **kwargs)
             CACHED_FUNCTIONS.append(wrapper)
         else:
-            logger.debug('Returning cached value for %s', func.__name__)
+            logger.debug(
+                'Returning cached value for %s: %s',
+                func.__name__, wrapper.cached_return_value
+                )
         return wrapper.cached_return_value
     return wrapper
 
