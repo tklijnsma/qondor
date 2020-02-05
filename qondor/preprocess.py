@@ -59,6 +59,7 @@ class Preprocessor(object):
             'gccsetup' : '/cvmfs/sft.cern.ch/lcg/contrib/gcc/7/x86_64-centos7/setup.sh',
             'pipdir' : '/cvmfs/sft.cern.ch/lcg/releases/pip/19.0.3-06476/x86_64-centos7-gcc7-opt',
             'rootsetup' : '/cvmfs/sft.cern.ch/lcg/releases/LCG_95/ROOT/6.16.00/x86_64-centos7-gcc7-opt/ROOT-env.sh',
+            'SCRAM_ARCH' : 'slc7_amd64_gcc820',
             }
 
     def preprocess():

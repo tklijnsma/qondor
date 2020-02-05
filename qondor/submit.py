@@ -151,9 +151,9 @@ class Submitter(object):
     def submit_to_htcondor(self):
         sub = {
             'universe' : 'vanilla',
-            'output' : '$out_(Cluster)_$(Process).txt',
-            'error' : '$err_(Cluster)_$(Process).txt',
-            'log' : '$log_(Cluster)_$(Process).txt',
+            'output' : 'out_$(Cluster)_$(Process).txt',
+            'error' : 'err_$(Cluster)_$(Process).txt',
+            'log' : 'log_$(Cluster)_$(Process).txt',
             'x509userproxy' : '/uscms/home/{0}/x509up_u55957'.format(os.environ['USER']),
             'executable': osp.basename(self.shfile),
             'environment' : {
@@ -183,7 +183,7 @@ class Submitter(object):
                 with schedd.transaction() as transaction:
                     ad = []
                     submit_object.queue(transaction, njobs, ad)
-                    return ad
+        return ad
 
 
 def htcondor_format_environment(env):
