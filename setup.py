@@ -12,6 +12,6 @@ setup(
     packages      = ['qondor'],
     zip_safe      = False,
     scripts       = [
-        'bin/qondor-run'
+        # 'bin/qondor-run'
         ],
     )
