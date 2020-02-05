@@ -31,7 +31,7 @@ class SHFile(object):
     def initialize(self):
         lines = [
             '#!/bin/bash',
-            'set -euxoE pipefail',
+            'set -e',
             'echo "hostname: $(hostname)"',
             'echo "date:     $(date)"',
             'echo "pwd:      $(pwd)"',
@@ -55,6 +55,7 @@ class SHFile(object):
             'export PATH="${pipdir}/bin:${PATH}"',
             'export PYTHONPATH="${pipdir}/lib/python2.7/site-packages/:${PYTHONPATH}"',
             '',
+            'set -uxoE pipefail',
             'echo "Setting up custom pip install dir"',
             'HOME="$(pwd)"',
             'pip(){ ${pipdir}/bin/pip "$@"; }  # To avoid any local pip installations',
