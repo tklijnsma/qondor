@@ -41,7 +41,7 @@ class SHFile(object):
 
     def set_env_variables(self):
         lines = []
-        for key, value in self.preprocessing.env.iter_items():
+        for key, value in self.preprocessing.env.iteritems():
             lines.append('export {0}={1}'.format(key, value))
         lines.append('')
         return lines
