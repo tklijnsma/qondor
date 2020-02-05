@@ -210,7 +210,7 @@ def tarball_python_module(module, outdir=None, ignore_uncommitted=False, dry=Fal
 
     # Fix the output name of the tarball
     outdir = os.getcwd() if outdir is None else outdir
-    outfile = osp.join(outdir, osp.basename(toplevel_git_dir) + '.tar')
+    outfile = osp.join(osp.abspath(outdir), osp.basename(toplevel_git_dir) + '.tar')
 
     with switchdir(toplevel_git_dir):
         if not ignore_uncommitted:
