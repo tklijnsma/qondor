@@ -74,14 +74,14 @@ class SHFile(object):
     def pip_installations(self):
         lines = []
         for package, install_instruction in self.preprocessing.pip:
-            package = package.replace('.', '-')
+            package = package.replace('.', '-').rstrip('/')
             if install_instruction == 'module-install':
                 lines.extend([
                     'mkdir {0}'.format(package),
                     'tar xf {0}.tar -C {0}'.format(package),
                     ])
             lines.extend([
-                'pip install --install-option="--prefix=${{pip_install_dir}}" {0}'.format(package),
+                'pip install --install-option="--prefix=${{pip_install_dir}}" -e {0}/'.format(package),
                 ''
                 ])
         return lines
