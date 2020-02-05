@@ -116,10 +116,12 @@ class ScheddManager(object):
 
 # Convenience functions
 
+GLOBAL_SCHEDDMAN = ScheddManager()
+
 def _get_scheddman(renew):
-    scheddman = ScheddManager()
-    if renew: scheddman.clear_cache()
-    return scheddman    
+    global GLOBAL_SCHEDDMAN
+    if renew: GLOBAL_SCHEDDMAN.clear_cache()
+    return GLOBAL_SCHEDDMAN
 
 def get_best_schedd(renew=False):
     return _get_scheddman(renew).get_best_schedd()
