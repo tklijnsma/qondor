@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import qondor
-import logging, os.path as osp, pprint
+import logging, os, os.path as osp, pprint
 from time import strftime
 logger = logging.getLogger('qondor')
 
