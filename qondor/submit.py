@@ -173,7 +173,7 @@ class Submitter(object):
         sub['environment'] = htcondor_format_environment(sub['environment'])
 
         # Determine njobs now
-        njobs = self.variables.get('njobs', 1)
+        njobs = self.preprocessing.variables.get('njobs', 1)
         logger.info('Submitting %s jobs with:%s', njobs, pprint.pformat(sub))
         if not self.dry:
             import htcondor
