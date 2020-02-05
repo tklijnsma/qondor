@@ -151,7 +151,7 @@ def get_jobs(cluster_id, proc_id=None):
 def wait(cluster_id, proc_id=None, n_sleep=10):
     while True:
         states = [j['JobStatus'] for j in get_jobs(cluster_id, proc_id)]
-        is_done = [ not(state in [1, 2]) for state in states ]
+        is_done = all([ not(state in [1, 2]) for state in states ])
         if is_done:
             logger.info('ClusterId %s ProcId %s seems done', cluster_id, proc_id)
             break
