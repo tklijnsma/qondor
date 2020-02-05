@@ -64,6 +64,9 @@ class SHFile(object):
             'mkdir -p "${pip_install_dir}/lib/python2.7/site-packages"',
             'export PATH="${pip_install_dir}/bin:${PATH}"',
             'export PYTHONPATH="${pip_install_dir}/lib/python2.7/site-packages:${PYTHONPATH}"',
+            '',
+            'pip -V',
+            'which pip',
             ''
             ]
         return lines
@@ -163,6 +166,7 @@ class Submitter(object):
                 'USER' : os.environ['USER'],
                 'CLUSTER_SUBMISSION_TIMESTAMP' : strftime('%Y%m%d_%H%M%S'),
                 },
+            '+qondorrundir' : self.rundir,
             }
 
         # Flatten files in a string
