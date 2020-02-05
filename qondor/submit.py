@@ -112,7 +112,7 @@ class Submitter(object):
             if install_instruction == 'module-install':
                 self.tar_python_module(package)
         self.create_shfile()
-        self.submit_to_htcondor()
+        return self.submit_to_htcondor()
 
     def make_rundir(self):
         self.rundir = osp.abspath('qondor_{0}_{1}'.format(
@@ -184,8 +184,8 @@ class Submitter(object):
                 with schedd.transaction() as transaction:
                     ad = []
                     cluster_id = submit_object.queue(transaction, njobs, ad)
-                    logger.debug('submit_object.queue returned: %s', cluster_id)
-        return cluster_id
+                    cluster_id = int(cluster_id)
+        return cluster_id, ad
 
 
 def htcondor_format_environment(env):
