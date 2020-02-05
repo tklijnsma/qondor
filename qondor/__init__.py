@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 import os
-from .logger import setup_logger
+from .logger import setup_logger, setup_subprocess_logger
 logger = setup_logger()
+subprocess_logger = setup_subprocess_logger()
 
 from . import utils
 

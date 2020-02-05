@@ -12,50 +12,44 @@ def colored(text, color=None):
     return text
 
 
-LOGGER_FORMATTER = logging.Formatter(
-    fmt = (
-        colored(
-            '[qondor|%(levelname)8s|%(asctime)s|%(module)s]:',
-            'yellow'
+def setup_logger(name='qondor', fmt=None):
+    if name in logging.Logger.manager.loggerDict:
+        logger = logging.getLogger(name)
+        logger.info('Logger %s is already defined', name)
+    else:
+        if fmt is None:
+            fmt = logging.Formatter(
+                fmt = (
+                    colored(
+                        '[qondor|%(levelname)8s|%(asctime)s|%(module)s]:',
+                        'yellow'
+                        )
+                    + ' %(message)s'
+                    ),
+                datefmt='%Y-%m-%d %H:%M:%S'
+                )
+        handler = logging.StreamHandler()
+        handler.setFormatter(fmt)
+        logger = logging.getLogger(name)
+        logger.setLevel(logging.DEBUG)
+        logger.addHandler(handler)
+    return logger
+
+
+def setup_subprocess_logger():
+    return setup_logger(
+        'subprocess',
+        fmt = logging.Formatter(
+            fmt = colored('[%(asctime)s]:', 'red') + ' %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S'
             )
-        + ' %(message)s'
-        ),
-    datefmt='%Y-%m-%d %H:%M:%S'
-    )
-
-SUBPROCESS_LOGGER_FORMATTER = logging.Formatter(
-    fmt = colored('[%(asctime)s]:', 'red') + ' %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'
-    )
-
-DEFAULT_LOGGER_NAME = 'qondor'
-DEFAULT_SUBPROCESS_LOGGER_NAME = 'subprocess'
-
-
-def setup_logger(name=DEFAULT_LOGGER_NAME):
-    handler = logging.StreamHandler()
-    handler.setFormatter(LOGGER_FORMATTER)
-
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)
-    logger.addHandler(handler)
-    return logger
-
-
-def setup_subprocess_logger(name=DEFAULT_SUBPROCESS_LOGGER_NAME):
-    handler = logging.StreamHandler()
-    handler.setFormatter(SUBPROCESS_LOGGER_FORMATTER)
-
-    logger = logging.getLogger(name)
-    logger.setLevel(logging.DEBUG)
-    logger.addHandler(handler)
-    return logger
+        )
 
 
 def set_log_file(
         log_file,
-        logger_name=DEFAULT_LOGGER_NAME,
-        subprocess_logger_name=DEFAULT_SUBPROCESS_LOGGER_NAME
+        logger_name='qondor',
+        subprocess_logger_name='subprocess'
         ):
     """
     Also outputs all logging to a file, but keeps the output
