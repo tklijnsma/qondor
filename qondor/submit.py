@@ -114,10 +114,10 @@ class Submitter(object):
         self.submit_to_htcondor()
 
     def make_rundir(self):
-        self.rundir = 'qondor_{0}_{1}'.format(
+        self.rundir = osp.abspath('qondor_{0}_{1}'.format(
             self.python_name,
             strftime('%Y%m%d_%H%M%S')
-            )
+            ))
         qondor.utils.create_directory(
             self.rundir,
             must_not_exist=True,
@@ -142,7 +142,7 @@ class Submitter(object):
         self.transfer_files.append(tarball)
 
     def create_shfile(self):
-        self.shfile = self.python_base + '.sh'
+        self.shfile = osp.join(self.rundir, self.python_name + '.sh')
         SHFile(self.preprocessing).to_file(
             self.shfile,
             dry = self.dry
@@ -155,7 +155,7 @@ class Submitter(object):
             'error' : '$err_(Cluster)_$(Process).txt',
             'log' : '$log_(Cluster)_$(Process).txt',
             'x509userproxy' : '/uscms/home/{0}/x509up_u55957'.format(os.environ['USER']),
-            'executable': self.shfile,
+            'executable': osp.basename(self.shfile),
             'environment' : {
                 'CONDOR_CLUSTER_NUMBER' : '$(Cluster)',
                 'CONDOR_PROCESS_ID' : '$(Process)',
@@ -178,11 +178,12 @@ class Submitter(object):
         if not self.dry:
             import htcondor
             schedd = qondor.get_best_schedd()
-            submit_object = htcondor.Submit(sub)
-            with schedd.transaction() as transaction:
-                ad = []
-                submit_object.queue(transaction, njobs, ad)
-                return ad
+            with qondor.switchdir(self.rundir):
+                submit_object = htcondor.Submit(sub)
+                with schedd.transaction() as transaction:
+                    ad = []
+                    submit_object.queue(transaction, njobs, ad)
+                    return ad
 
 
 def htcondor_format_environment(env):
