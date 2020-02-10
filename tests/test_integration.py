@@ -51,7 +51,7 @@ class TestSplitTransactions(TestCase):
         os.chdir(self._backdir)
 
     def test_splittransactions(self):
-        python_file = osp.join(TESTDIR, 'job_helloworld.py')
+        python_file = osp.join(TESTDIR, 'job_split_transactions.py')
         submitter = qondor.Submitter(python_file)
         cluster_ids, ads = submitter.submit()
         self.cluster_ids_to_remove.extend(cluster_ids)
