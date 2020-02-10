@@ -171,7 +171,7 @@ class Submitter(object):
                 },
             }
         # Overwrite keys from the preprocessing
-        for key, value in self.preprocessing.condor:
+        for key, value in self.preprocessing.htcondor:
             sub[key] = value
 
         # Flatten files in a string
