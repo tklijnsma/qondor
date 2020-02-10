@@ -182,7 +182,7 @@ class Submitter(object):
         # Determine njobs
         njobs = self.preprocessing.variables.get('njobs', 1)
 
-        if len(self.split_transactions) == 0:
+        if len(self.preprocessing.split_transactions) == 0:
             logger.info('Submitting %s jobs with:\n%s', njobs, pprint.pformat(sub))
             sub['environment'] = htcondor_format_environment(sub['environment'])
             if not self.dry:
@@ -190,7 +190,7 @@ class Submitter(object):
         else:
             cluster_ids = []
             ads = []
-            for item in self.split_transactions:
+            for item in self.preprocessing.split_transactions:
                 subcopy = sub.copy()
                 # Give it an env variable
                 subcopy.environment['QONDORITEM'] = item
