@@ -53,6 +53,7 @@ class TestSplitTransactions(TestCase):
     def test_splittransactions(self):
         python_file = osp.join(TESTDIR, 'job_split_transactions.py')
         submitter = qondor.Submitter(python_file)
+        qondor.logger.info(submitter.preprocessing.split_transactions)
         cluster_ids, ads = submitter.submit()
         self.cluster_ids_to_remove.extend(cluster_ids)
         self.assertTrue('this_is_item_1' in ads[0][0]['Environment'])

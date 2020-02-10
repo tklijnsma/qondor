@@ -95,7 +95,7 @@ class Preprocessor(object):
 
     def preprocess_line(self, line):
         logger.debug('Processing line: %s', line)
-        if line.startswith('htcondor '):
+        if   line.startswith('htcondor '):
             self.preprocess_line_htcondor(line)
         elif line.startswith('pip '):
             self.preprocess_line_pip(line)
