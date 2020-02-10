@@ -186,7 +186,7 @@ class Submitter(object):
             logger.info('Submitting %s jobs with:\n%s', njobs, pprint.pformat(sub))
             sub['environment'] = htcondor_format_environment(sub['environment'])
             if not self.dry:
-                return htcondor_submit(sub, submission_dir=self.rundir)
+                return htcondor_submit(sub, njobs, submission_dir=self.rundir)
         else:
             cluster_ids = []
             ads = []
@@ -200,14 +200,14 @@ class Submitter(object):
                     njobs, item, pprint.pformat(subcopy)
                     )
                 if not self.dry:
-                    cluster_id, ad = htcondor_submit(subcopy, submission_dir=self.rundir)
+                    cluster_id, ad = htcondor_submit(subcopy, njobs, submission_dir=self.rundir)
                     cluster_ids.append(cluster_id)
                     ads.append(ad)
             return cluster_ids, ads
 
 
 
-def htcondor_submit(sub, submission_dir='.'):
+def htcondor_submit(sub, njobs=1, submission_dir='.'):
     import htcondor
     schedd = qondor.get_best_schedd()
     with qondor.utils.switchdir(submission_dir):
