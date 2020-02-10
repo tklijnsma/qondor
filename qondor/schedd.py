@@ -149,6 +149,11 @@ def get_jobs(cluster_id, proc_id=None):
     logger.info('Query returned %s', classads)
     return classads
 
+def remove_jobs(cluster_id):
+    logger.info('Removing cluster_id %s', cluster_id)
+    for schedd in get_schedds():
+        schedd.act(htcondor.JobAction.Remove, 'ClusterId=?="{0}"'.format(cluster_id))
+
 def wait(cluster_id, proc_id=None, n_sleep=10):
     while True:
         states = [j['JobStatus'] for j in get_jobs(cluster_id, proc_id)]

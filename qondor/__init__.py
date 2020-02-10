@@ -11,10 +11,10 @@ if 'QONDOR_BATCHMODE' in os.environ:
     BATCHMODE = True
 
 from . import schedd
-from .schedd import get_best_schedd, get_schedd_ads, wait
-from .preprocess import Preprocessor
+from .schedd import get_best_schedd, get_schedd_ads, wait, remove_jobs
+from .preprocess import Preprocessor, preprocessing
 from .submit import SHFile, Submitter
-
+from .cmssw import CMSSW
 
 if os.environ.get('HOSTNAME', '').endswith('fnal.gov'):
     # Fix to be able to import htcondor python bindings

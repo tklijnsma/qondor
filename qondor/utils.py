@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import os, shutil, logging, subprocess
+import os, shutil, logging, subprocess, glob
 import os.path as osp
 import qondor
 logger = logging.getLogger('qondor')
@@ -228,3 +228,51 @@ def tarball_python_module(module, outdir=None, ignore_uncommitted=False, dry=Fal
         logger.info('Created tarball {0}'.format(outfile))
         return outfile
 
+
+def extract_tarball(tarball, outdir='.', dry=False):
+    """
+    Extracts a tarball to outdir
+    """
+    tarball = osp.abspath(tarball)
+    outdir = osp.abspath(outdir)
+    logger.warning(
+        'Extracting {0} ==> {1}'
+        .format(tarball, outdir)
+        )
+    cmd = [
+        'tar', '-xvf', tarball,
+        '-C', outdir
+        ]
+    run_command(cmd, dry=dry)
+
+
+def extract_tarball_cmssw(tarball, outdir='.', dry=False):
+    """
+    Extracts a tarball to outdir, and returns the extracted CMSSW dir
+    """
+    extract_tarball(tarball, outdir, dry)
+    # return the CMSSW directory
+    if dry: return 'CMSSW_dry'
+    return [ d for d in glob.glob(osp.join(outdir, 'CMSSW*')) if not d.endswith('.gz')][0]
+
+
+def check_is_cmssw_path(path):
+    """
+    Checks whether the passed path contains a CMSSW distribution.
+    """
+    abs_path = osp.abspath(path)
+    if not osp.basename(path).startswith('CMSSW'):
+        raise ValueError(
+            'Expected {0} to start with "CMSSW" (path: {1})'
+            .format(osp.basename(path), abs_path)
+            )
+    if not osp.isdir(path):
+        raise OSError(
+            '{0} is not a directory (path: {1})'
+            .format(path, abs_path)
+            )
+    if not osp.isdir(osp.join(path, 'src')):
+        raise OSError(
+            '{0} is not a directory (path: {1})'
+            .format(osp.join(path, 'src'), abs_path)
+            )

@@ -5,6 +5,14 @@ from collections import OrderedDict
 logger = logging.getLogger('qondor')
 
 
+
+def preprocessing(filename):
+    """
+    Convenience function that returns a Preprocessor object
+    """
+    return Preprocessor(filename)
+
+
 def iter_preprocess_lines(lines):
     _linebreak_cache = ''
     for line in lines:
@@ -61,6 +69,25 @@ class Preprocessor(object):
             'rootsetup' : '/cvmfs/sft.cern.ch/lcg/releases/LCG_95/ROOT/6.16.00/x86_64-centos7-gcc7-opt/ROOT-env.sh',
             'SCRAM_ARCH' : 'slc7_amd64_gcc820',
             }
+        self.split_transactions = []
+
+    def get_item():
+        if not(len(self.split_transactions)):
+            raise RuntimeError(
+                '.get_item() should only be called if transactions are split. '
+                'Either .preprocess() is not yet called, or there is no split_transactions '
+                'directive.'
+                )
+        elif not 'QONDORITEM' in os.environ:
+            raise RuntimeError(
+                'Transactions should have been split, but no QONDORITEM was found '
+                'in the environment.'
+                )
+        if qondor.BATCHMODE:
+            return os.environ['QONDORITEM']
+        else:
+            logger.debug('Local mode: returning first item of %s', self.split_transactions)
+            return self.split_transactions[0]
 
     def preprocess():
         for line in iter_preprocess_file(self.filename):
@@ -76,6 +103,8 @@ class Preprocessor(object):
             self.preprocess_line_file(line)
         elif line.startswith('env '):
             self.preprocess_line_env(line)
+        elif line.startswith('split_transactions '):
+            self.preprocess_line_split_transactions(line)
         else:
             self.preprocess_line_variable(line)
 
@@ -121,6 +150,13 @@ class Preprocessor(object):
             raise
         logger.debug('(environment) %s = %s', key, value)
         self.env[key] = value
+
+    def preprocess_line_split_transactions(self, line):
+        self.split_transactions = line.split()[1:]
+        if not len(self.split_transactions):
+            logger.error('line "%s" did not have expected structure', line)
+            raise ValueError
+        logger.debug('Will split transactions per items: %s', self.split_transactions)
 
     def preprocess_line_variable(self, line):
         try:

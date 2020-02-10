@@ -153,6 +153,7 @@ class Submitter(object):
             )
 
     def submit_to_htcondor(self):
+        # Make a standard submission dict
         sub = {
             'universe' : 'vanilla',
             'output' : 'out_$(Cluster)_$(Process).txt',
@@ -169,28 +170,53 @@ class Submitter(object):
                 'CLUSTER_SUBMISSION_TIMESTAMP' : strftime('%Y%m%d_%H%M%S'),
                 },
             }
+        # Overwrite keys from the preprocessing
+        for key, value in self.preprocessing.condor:
+            sub[key] = value
 
         # Flatten files in a string
         transfer_files = self.transfer_files + self.preprocessing.files.values()
         if len(transfer_files) > 0:
             sub['transfer_input_files'] = ','.join(transfer_files)
-
-        # Turn dict-like environment into formatted string
-        sub['environment'] = htcondor_format_environment(sub['environment'])
-
-        # Determine njobs now
+        
+        # Determine njobs
         njobs = self.preprocessing.variables.get('njobs', 1)
-        logger.info('Submitting %s jobs with:%s', njobs, pprint.pformat(sub))
-        if not self.dry:
-            import htcondor
-            schedd = qondor.get_best_schedd()
-            with qondor.utils.switchdir(self.rundir):
-                submit_object = htcondor.Submit(sub)
-                with schedd.transaction() as transaction:
-                    ad = []
-                    cluster_id = submit_object.queue(transaction, njobs, ad)
-                    cluster_id = int(cluster_id)
-        return cluster_id, ad
+
+        if len(self.split_transactions) == 0:
+            logger.info('Submitting %s jobs with:\n%s', njobs, pprint.pformat(sub))
+            sub['environment'] = htcondor_format_environment(sub['environment'])
+            if not self.dry:
+                return htcondor_submit(sub, submission_dir=self.rundir)
+        else:
+            cluster_ids = []
+            ads = []
+            for item in self.split_transactions:
+                subcopy = sub.copy()
+                # Give it an env variable
+                subcopy.environment['QONDORITEM'] = item
+                subcopy['environment'] = htcondor_format_environment(subcopy['environment'])
+                logger.info(
+                    'Submitting %s jobs for item %s with:\n%s',
+                    njobs, item, pprint.pformat(subcopy)
+                    )
+                if not self.dry:
+                    cluster_id, ad = htcondor_submit(subcopy, submission_dir=self.rundir)
+                    cluster_ids.append(cluster_id)
+                    ads.append(ad)
+            return cluster_ids, ads
+
+
+
+def htcondor_submit(sub, submission_dir='.'):
+    import htcondor
+    schedd = qondor.get_best_schedd()
+    with qondor.utils.switchdir(submission_dir):
+        submit_object = htcondor.Submit(sub)
+        with schedd.transaction() as transaction:
+            ad = []
+            cluster_id = submit_object.queue(transaction, njobs, ad)
+            cluster_id = int(cluster_id)
+    return cluster_id, ad
 
 
 def htcondor_format_environment(env):
