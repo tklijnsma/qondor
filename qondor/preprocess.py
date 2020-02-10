@@ -104,6 +104,7 @@ class Preprocessor(object):
         elif line.startswith('env '):
             self.preprocess_line_env(line)
         elif line.startswith('split_transactions '):
+            logger.debug('encountered split_transactions')
             self.preprocess_line_split_transactions(line)
         else:
             self.preprocess_line_variable(line)
