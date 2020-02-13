@@ -38,7 +38,8 @@ def get_preprocess_lines(lines):
 def iter_preprocess_file(filename):
     with open(filename, 'r') as f:
         # File object should support iteration
-        return iter_preprocessing_lines(f)
+        for line in iter_preprocess_lines(f):
+            yield line
 
 def get_preprocess_file(filename):
     return list(iter_preprocess_file(filename))
@@ -70,6 +71,7 @@ class Preprocessor(object):
             'SCRAM_ARCH' : 'slc7_amd64_gcc820',
             }
         self.split_transactions = []
+        self.preprocess()
 
     def get_item():
         if not(len(self.split_transactions)):
@@ -89,7 +91,7 @@ class Preprocessor(object):
             logger.debug('Local mode: returning first item of %s', self.split_transactions)
             return self.split_transactions[0]
 
-    def preprocess():
+    def preprocess(self):
         for line in iter_preprocess_file(self.filename):
             self.preprocess_line(line)
 
