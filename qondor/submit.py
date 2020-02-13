@@ -209,7 +209,7 @@ class Submitter(object):
 
 def htcondor_submit(sub, njobs=1, submission_dir='.'):
     import htcondor
-    schedd = qondor.get_best_schedd()
+    schedd = qondor.get_best_schedd(renew=True)
     with qondor.utils.switchdir(submission_dir):
         submit_object = htcondor.Submit(sub)
         with schedd.transaction() as transaction:
