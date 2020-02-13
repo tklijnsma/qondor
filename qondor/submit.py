@@ -193,7 +193,7 @@ class Submitter(object):
             for item in self.preprocessing.split_transactions:
                 subcopy = sub.copy()
                 # Give it an env variable
-                subcopy.environment['QONDORITEM'] = item
+                subcopy['environment']['QONDORITEM'] = item
                 subcopy['environment'] = htcondor_format_environment(subcopy['environment'])
                 logger.info(
                     'Submitting %s jobs for item %s with:\n%s',
