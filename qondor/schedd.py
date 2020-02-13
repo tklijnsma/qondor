@@ -150,6 +150,7 @@ def get_jobs(cluster_id, proc_id=None):
     return classads
 
 def remove_jobs(cluster_id):
+    import htcondor
     logger.info('Removing cluster_id %s', cluster_id)
     for schedd in get_schedds():
         schedd.act(htcondor.JobAction.Remove, 'ClusterId=?="{0}"'.format(cluster_id))
