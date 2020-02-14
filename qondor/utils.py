@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import os, shutil, logging, subprocess, glob
+import os, shutil, logging, subprocess, glob, pprint
 import os.path as osp
 import qondor
 logger = logging.getLogger('qondor')
@@ -81,10 +81,10 @@ class switchdir(object):
         if not self.dry: os.chdir(self._backdir)
 
 def run_command(cmd, env=None, dry=False, shell=False):
-    logger.warning('Issuing command: {0}'.format(' '.join(cmd)))
+    logger.warning('Issuing command: {0}'.format(' '.join(cmd) if not is_string(cmd) else cmd))
     if dry: return
 
-    if shell:
+    if shell and not is_string(cmd):
         cmd = ' '.join(cmd)
 
     process = subprocess.Popen(
@@ -168,7 +168,7 @@ def is_string(string):
     return isinstance(string, basestring)
 
 
-def tarball_python_module(module, outdir=None, ignore_uncommitted=False, dry=False):
+def tarball_python_module(module, outdir=None, allow_uncommitted=True, dry=False):
     """
     Takes a python module or a path to a file of said module, goes to the associated
     top-level git directory, and creates a tarball.
@@ -186,7 +186,6 @@ def tarball_python_module(module, outdir=None, ignore_uncommitted=False, dry=Fal
                 'Path %s for module %s does not exist; reloading and trying again',
                 path, module
                 )
-            import importlib
             reload(module)
             path = osp.abspath(module.__path__[0])
             if osp.exists(path):
@@ -213,7 +212,20 @@ def tarball_python_module(module, outdir=None, ignore_uncommitted=False, dry=Fal
     outfile = osp.join(osp.abspath(outdir), osp.basename(toplevel_git_dir) + '.tar')
 
     with switchdir(toplevel_git_dir):
-        if not ignore_uncommitted:
+        if allow_uncommitted:
+            logger.info('Creating tarball for %s including uncommitted changes', toplevel_git_dir)
+             # Create the tarball with uncommitted changes in it
+            # if not dry: run_multiple_commands([
+            #     'stashName=`git stash create` ',
+            #     'git archive $stashName -o {0}'.format(outfile)
+            #     ])
+            if not dry:
+                run_command(
+                    'git ls-files -z | xargs -0 tar -cvf {0}'
+                    .format(outfile),
+                    shell=True
+                    )
+        else:
             # Check if there are uncommitted changes
             try:
                 run_command(['git', 'diff-index', '--quiet', 'HEAD', '--'])
@@ -223,8 +235,9 @@ def tarball_python_module(module, outdir=None, ignore_uncommitted=False, dry=Fal
                     'with some changes not committed.'
                     )
                 raise
-        # Create the actual tarball of the latest commit
-        if not dry: run_command(['git', 'archive', '-o', outfile, 'HEAD'])
+            # Create the actual tarball of the latest commit
+            if not dry: run_command(['git', 'archive', '-o', outfile, 'HEAD'])
+
         logger.info('Created tarball {0}'.format(outfile))
         return outfile
 
@@ -276,3 +289,41 @@ def check_is_cmssw_path(path):
             '{0} is not a directory (path: {1})'
             .format(osp.join(path, 'src'), abs_path)
             )
+
+def get_clean_env():
+    env = os.environ.copy()
+    for var in [
+        'ROOTSYS',
+        'PATH',
+        'LD_LIBRARY_PATH',
+        'DYLD_LIBRARY_PATH',
+        'SHLIB_PATH',
+        'LIBPATH',
+        'PYTHONPATH',
+        'MANPATH',
+        'CMAKE_PREFIX_PATH',
+        'JUPYTER_PATH',
+        # Added due to ROOT-env.sh
+        'CPLUS_INCLUDE_PATH', 'CXX',
+        'ZLIB_HOME',          'CURL_HOME',
+        'DAVIX_HOME',         'GSL_HOME',
+        'SETUPTOOLS_HOME',    'FONTCONFIG_HOME',
+        'CAIRO_HOME',         'SQLITE_HOME',
+        'PIXMAN_HOME',        'FREETYPE_HOME',
+        'TBB_HOME',           'FC',
+        'PKG_CONFIG_HOME',    'VC_HOME',
+        'PNG_HOME',           'FFTW_HOME',
+        'BOOST_HOME',         'VDT_HOME',
+        'ROOT_HOME',          'ZEROMQ_HOME',
+        'LIBXML2_HOME',       'PKG_CONFIG_PATH',
+        'EXPAT_HOME',         'COMPILER_PATH',
+        'BLAS_HOME',          'R_HOME',
+        'XROOTD_HOME',        'MYSQL_HOME',
+        'GFAL_HOME',          'CC',
+        'C_INCLUDE_PATH',     'PYTHON_HOME',
+        'PYTHONHOME',         'ORACLE_HOME',
+        'GPERF_HOME',         'SRM_IFCE_HOME',
+        'NUMPY_HOME',         'DCAP_HOME',
+        ]:
+        if var in env: del env[var]
+    return env

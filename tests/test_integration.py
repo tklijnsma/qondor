@@ -3,26 +3,45 @@ try:
     from mock import Mock, MagicMock, patch
 except ImportError:
     from unittest.mock import Mock, MagicMock, patch
-import logging, os
+import logging, os, glob
 import os.path as osp
 import qondor
+logger = qondor.logger
 
 TESTDIR = osp.abspath(osp.dirname(__file__))
 
 
-class TestHelloWorld(TestCase):
+
+class CaseJobWithCleanup(TestCase):
 
     def setUp(self):
         self._backdir = os.getcwd()
         os.chdir(TESTDIR)
+        self.cluster_ids_to_remove = []
+        self.dirs_to_remove = []
+        self.files_to_remove = []
 
     def tearDown(self):
+        for cluster_id in self.cluster_ids_to_remove:
+            qondor.remove_jobs(cluster_id)
+        for directory in self.dirs_to_remove:
+            if not osp.isdir(directory): continue
+            logger.info('Removing %s', directory)
+            shutil.rmtree(directory)
+        for file in self.files_to_remove:
+            if not osp.isfile(file): continue
+            logger.info('Removing %s', file)
+            os.remove(file)
         os.chdir(self._backdir)
+
+
+class TestHelloWorld(CaseJobWithCleanup):
 
     def test_helloworld(self):
         python_file = osp.join(TESTDIR, 'job_helloworld.py')
         submitter = qondor.Submitter(python_file)
         cluster_id, ads = submitter.submit()
+        self.cluster_ids_to_remove.append(cluster_id)
         qondor.logger.info('Submitted job %s:\n%s', cluster_id, ads)
         qondor.wait(cluster_id)
         out = osp.join(ads[0]['QondorRundir'], ads[0]['Out'])
@@ -38,41 +57,45 @@ class TestHelloWorld(TestCase):
             'Hello world!'
             )
 
-class TestSplitTransactions(TestCase):
 
-    def setUp(self):
-        self._backdir = os.getcwd()
-        os.chdir(TESTDIR)
-        self.cluster_ids_to_remove = []
-
-    def tearDown(self):
-        for cluster_id in self.cluster_ids_to_remove:
-            qondor.remove_jobs(cluster_id)
-        os.chdir(self._backdir)
+class TestSplitTransactions(CaseJobWithCleanup):
 
     def test_splittransactions(self):
         python_file = osp.join(TESTDIR, 'job_split_transactions.py')
         submitter = qondor.Submitter(python_file)
-        qondor.logger.info(submitter.preprocessing.split_transactions)
+        logger.info(submitter.preprocessing.split_transactions)
         cluster_ids, ads = submitter.submit()
         self.cluster_ids_to_remove.extend(cluster_ids)
         self.assertTrue('this_is_item_1' in ads[0][0]['Environment'])
 
 
-class TestCMSSW(TestCase):
+class TestCMSSW(CaseJobWithCleanup):
 
     def setUp(self):
-        self._backdir = os.getcwd()
-        self.tarball = osp.join(TESTDIR, 'CMSSW_10_2_18.tar.gz')
-        self.scram_arch = 'slc7_amd64_gcc820'
-        self.rundir = '/tmp/qondortesting'
+        super(TestCMSSW, self).setUp()
+        self.tarball = osp.join(TESTDIR, 'CMSSW_11_0_0_pre10_HGCALHistoryWithCaloPositions.tar.gz')
 
-    def tearDown(self):
-        os.chdir(self._backdir)
-
-    def test_extract(self):
-        cmssw = qondor.CMSSW.from_tarball(self.tarball, self.scram_arch, outdir=self.rundir)
+    def test_extract_and_run_locally(self):
+        cmssw = qondor.CMSSW.from_tarball(self.tarball)
         self.assertEquals(
             cmssw.cmssw_src,
-            osp.join(self.rundir, 'CMSSW_10_2_18/src')
+            osp.join(qondor.CMSSW.default_local_rundir, 'CMSSW_11_0_0_pre10/src')
             )
+        passed_outfile = osp.join(TESTDIR, 'test_root_file.root')
+        actual_outfile = passed_outfile.replace('.root', '_numEvent5.root')
+        self.files_to_remove.append(actual_outfile)
+        cmssw.run_command([
+            'cmsRun',
+            'HGCALDev/PCaloHitWithPostionProducer/python/SingleMuPt_pythia8_cfi_GEN_SIM_PCaloHitWithPosition.py',
+            'outputFile={0}'.format(passed_outfile),
+            'maxEvents=5'
+            ])
+        self.assertTrue(osp.isfile(actual_outfile))
+
+    def test_extract_and_run_condor(self):
+        python_file = osp.join(TESTDIR, 'job_cmssw.py')
+        submitter = qondor.Submitter(python_file)
+        cluster_id, ads = submitter.submit()
+        outfile = 'root://cmseos.fnal.gov//store/user/klijnsma/qondor_testing/test.root'
+        # Check and clean up manually... 
+

@@ -35,6 +35,8 @@ class SHFile(object):
             'echo "hostname: $(hostname)"',
             'echo "date:     $(date)"',
             'echo "pwd:      $(pwd)"',
+            'echo "Redirecting all output to stderr from here on out"',
+            'exec 1>&2',
             ''
             ]
         return lines
@@ -96,8 +98,6 @@ class SHFile(object):
 class Submitter(object):
     """docstring for Submitter"""
 
-    ignore_uncommitted_changes_in_python_modules = False
-
     def __init__(self, python_file, dry=False):
         super(Submitter, self).__init__()
         self.original_python_file = osp.abspath(python_file)
@@ -140,7 +140,6 @@ class Submitter(object):
         tarball = qondor.utils.tarball_python_module(
             module,
             outdir = self.rundir,
-            ignore_uncommitted = self.ignore_uncommitted_changes_in_python_modules,
             dry=self.dry
             )
         self.transfer_files.append(tarball)
