@@ -1,0 +1,22 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import qondor
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    'runtimestamp',
+    type=str,
+    help='Timestamp in the future, up to which to sleep'
+    )
+parser.add_argument(
+    'allowed_lateness',
+    type=int,
+    help='Maximum number of seconds after `runtimestamp` for which the return status is still 0'
+    )
+args = parser.parse_args()
+
+def main():
+    pass
+
+if __name__ == '__main__':
+    main()

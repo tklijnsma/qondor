@@ -13,5 +13,7 @@ setup(
     zip_safe      = False,
     scripts       = [
         # 'bin/qondor-run'
+        'bin/qondor-submit',
+        'bin/qondor-sleepuntil'
         ],
     )

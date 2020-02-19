@@ -1,0 +1,15 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import qondor
+import argparse
+parser = argparse.ArgumentParser()
+parser.add_argument('pythonfile', type=str, help='Path to a python file to be submitted to htcondor')
+args = parser.parse_args()
+
+def main():
+    qondor.utils.check_proxy()
+    submitter = qondor.Submitter(args.pythonfile)
+    cluster_id, ads = submitter.submit()
+
+if __name__ == '__main__':
+    main()
