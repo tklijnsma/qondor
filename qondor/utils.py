@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import os, shutil, logging, subprocess, glob, pprint
+import os, shutil, logging, subprocess, glob, pprint, time, datetime
 import os.path as osp
 import qondor
 logger = logging.getLogger('qondor')
@@ -327,3 +327,72 @@ def get_clean_env():
         ]:
         if var in env: del env[var]
     return env
+
+
+def convert_to_utc(local_time):
+    """
+    Converts a local time to UTC.
+    Implemented for only a few basic timezones.
+    Needs to be extended with pytz if this function
+    get seriously used.
+    """
+    # See: https://stackoverflow.com/a/10854983/9209944
+    delta = datetime.timedelta(
+        seconds = time.timezone if (time.localtime().tm_isdst == 0) else time.altzone
+        )
+    new_time = local_time + delta
+    logger.debug('Offsetting %s by %s hours to get to UTC %s', local_time, delta, new_time)
+    return new_time
+
+def get_now_utc():
+    return convert_to_utc(datetime.datetime.now())
+
+
+def sleep_until(runtime_utc, allowed_lateness=300, is_not_utc=False):
+    if is_not_utc:
+        runtime_utc = convert_to_utc(runtime_utc)
+    now_utc = get_now_utc()
+    logger.info('Current time (UTC):       %s', now_utc)
+    logger.info('Scheduled run time (UTC): %s', runtime_utc)
+
+    delta = runtime_utc - now_utc
+    delta_seconds = abs(delta.total_seconds())
+
+    if delta < datetime.timedelta(seconds=0):
+        # The job is too late; runtime_utc has already passed
+        if delta_seconds < allowed_lateness:
+            logger.info(
+                'Job is late by %s seconds, which is within the allowed window'
+                ' of max %s seconds late',
+                delta_seconds, allowed_lateness
+                )
+            return 0
+        else:
+            logger.error(
+                'Job is late by %s seconds, which is OUTSIDE the allowed window'
+                ' of max %s seconds late - throwing exception',
+                delta_seconds, allowed_lateness
+                )
+            raise RuntimeError
+    else:
+        logger.info(
+            'Job is early by %s seconds, sleeping', delta_seconds
+            )
+        time.sleep(delta_seconds)
+        return 0
+
+
+def check_proxy():
+    """
+    Asserts that the user has a grid proxy that is valid for at least 168 more hours (1 week)
+    """
+    # cmd = 'voms-proxy-info -exists -valid 168:00' # Check if there is an existing proxy for a full week
+    try:
+        proxy_valid = subprocess.check_output(['grid-proxy-info', '-exists', '-valid', '168:00']) == 0
+        logger.info('Found a valid proxy')
+    except subprocess.CalledProcessError:
+        logger.error(
+            'Grid proxy is not valid for at least 1 week. Renew it using:\n'
+            'voms-proxy-init -voms cms -valid 192:00'
+            )
+        raise

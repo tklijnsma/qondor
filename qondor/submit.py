@@ -25,6 +25,7 @@ class SHFile(object):
         lines.extend(self.set_env_variables())
         lines.extend(self.set_cms_env_and_pip())
         lines.extend(self.pip_installations())
+        lines.extend(self.sleep_until_runtime())
         lines.extend(self.python_call())
         return lines
 
@@ -87,6 +88,17 @@ class SHFile(object):
                 ''
                 ])
         return lines
+
+    def sleep_until_runtime(self):
+        if not(self.preprocessing.delayed_runtime is None):
+            return [
+                'qondor-sleepuntil "{0}"'.format(
+                    self.preprocessing.delayed_runtime.strftime('%Y-%m-%d %H:%M:%S')
+                    ),
+                ''
+                ]
+        else:
+            return []
 
     def python_call(self):
         return [

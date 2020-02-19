@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import qondor
-import logging, re, os.path as osp
+import logging, re, os.path as osp, datetime
 from collections import OrderedDict
 logger = logging.getLogger('qondor')
 
@@ -71,6 +71,7 @@ class Preprocessor(object):
             'SCRAM_ARCH' : 'slc7_amd64_gcc820',
             }
         self.split_transactions = []
+        self.delayed_runtime = None
         self.preprocess()
 
     def get_item():
@@ -106,10 +107,27 @@ class Preprocessor(object):
         elif line.startswith('env '):
             self.preprocess_line_env(line)
         elif line.startswith('split_transactions '):
-            logger.debug('encountered split_transactions')
             self.preprocess_line_split_transactions(line)
+        elif line.startswith('delay '):
+            self.preprocess_line_delay(line)
         else:
             self.preprocess_line_variable(line)
+
+    def preprocess_line_delay(self, line):
+        try:
+            components = line.split()[1:]
+        except ValueError:
+            logger.error('line "%s" did not have expected structure', line)
+            raise
+        unit = 's' if len(components) <= 1 else components[1]
+        conversion_to_seconds = {'s' : 1, 'm' : 60, 'h' : 3600}
+        if not unit in conversion_to_seconds:
+            raise ValueError(
+                'Delay unit should be in %s', conversion_to_seconds.keys()
+                )
+        n_seconds_delay = int(components[0]) * conversion_to_seconds[unit]
+        self.delayed_runtime = qondor.utils.get_now_utc() + datetime.timedelta(seconds=n_seconds_delay)
+        logger.debug('Jobs will sleep until %s (%s seconds in the future)', self.delayed_runtime, n_seconds_delay)
 
     def preprocess_line_htcondor(self, line):
         # Remove 'htcondor' and assume 'key value' structure further on
