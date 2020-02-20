@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import qondor
-import logging, os, os.path as osp, pprint
+import logging, os, os.path as osp, pprint, shutil
 from time import strftime
 logger = logging.getLogger('qondor')
 
@@ -126,13 +126,19 @@ class Submitter(object):
         self.transfer_files = []
 
     def submit(self):
-        self.make_rundir()
-        self.copy_python_file()
-        for package, install_instruction in self.preprocessing.pip:
-            if install_instruction == 'module-install':
-                self.tar_python_module(package)
-        self.create_shfile()
-        return self.submit_to_htcondor()
+        try:
+            self.make_rundir()
+            self.copy_python_file()
+            for package, install_instruction in self.preprocessing.pip:
+                if install_instruction == 'module-install':
+                    self.tar_python_module(package)
+            self.create_shfile()
+            return self.submit_to_htcondor()
+        except:
+            logger.error('Error during submission; cleaning up %s', self.rundir)
+            if osp.isdir(self.rundir):
+                shutil.rmtree(self.rundir)
+            raise
 
     def make_rundir(self):
         self.rundir = osp.abspath('qondor_{0}_{1}'.format(
