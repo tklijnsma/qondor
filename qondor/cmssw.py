@@ -41,28 +41,45 @@ class CMSSW(object):
         else:
             self.scram_arch = scram_arch
         self._is_renamed = False
+        self._is_externallinks = False
 
     def rename_project(self):
         if self._is_renamed: return
         self._is_renamed = True
         logger.info('Renaming project %s', self.cmssw_src)
-        with qondor.utils.switchdir(self.cmssw_src):
-            cmds = [
-                'shopt -s expand_aliases',
-                'source /cvmfs/cms.cern.ch/cmsset_default.sh',
-                'export SCRAM_ARCH={0}'.format(self.scram_arch),
-                'scram b ProjectRename',
-                ]
-            qondor.utils.run_multiple_commands(cmds, env=qondor.utils.get_clean_env())
+        self.run_commands_nocmsenv(['scram b ProjectRename'])
+
+    def scramb_externallinks(self):
+        if self._is_externallinks: return
+        self._is_externallinks = True
+        logger.info('Doing scram b ExternalLinks %s', self.cmssw_src)
+        self.run_commands_nocmsenv(['scram b ExternalLinks'])
 
     def run_command(self, cmd):
-        if not self._is_renamed: self.rename_project()
+        """
+        Mostly legacy; use run_commands instead
+        """
+        self.run_commands([cmd])
+
+    def run_commands(self, cmds):
+        """
+        Main/Public method: Much like run_commands_nocmsenv, but includes cmsenv
+        This is intended to be called with cmsRun/cmsDriver.py commands
+        """
+        self.run_commands_nocmsenv(['cmsenv'] + cmds)
+
+    def run_commands_nocmsenv(self, cmds):
+        """
+        Preprends the basic CMSSW environment setup, and executes a set of
+        commands in a clean environment
+        """
+        self.rename_project()
         with qondor.utils.switchdir(self.cmssw_src):
-            cmds = [
-                'shopt -s expand_aliases',
-                'source /cvmfs/cms.cern.ch/cmsset_default.sh',
-                'export SCRAM_ARCH={0}'.format(self.scram_arch),
-                'cmsenv',
-                cmd
-                ]
-            qondor.utils.run_multiple_commands(cmds, env=qondor.utils.get_clean_env())
+            qondor.utils.run_multiple_commands(
+                [
+                    'shopt -s expand_aliases',
+                    'source /cvmfs/cms.cern.ch/cmsset_default.sh',
+                    'export SCRAM_ARCH={0}'.format(self.scram_arch),
+                    ] + cmds,
+                env = qondor.utils.get_clean_env()
+                )

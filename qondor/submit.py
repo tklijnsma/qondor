@@ -91,9 +91,14 @@ class SHFile(object):
 
     def sleep_until_runtime(self):
         if not(self.preprocessing.delayed_runtime is None):
+            if not(self.preprocessing.allowed_lateness is None):
+                allowed_lateness = '--allowed_lateness {0}'.format(self.preprocessing.allowed_lateness)
+            else:
+                allowed_lateness = ''
             return [
-                'qondor-sleepuntil "{0}"'.format(
-                    self.preprocessing.delayed_runtime.strftime('%Y-%m-%d %H:%M:%S')
+                'qondor-sleepuntil "{0}" {1}'.format(
+                    self.preprocessing.delayed_runtime.strftime('%Y-%m-%d %H:%M:%S'),
+                    allowed_lateness
                     ),
                 ''
                 ]
@@ -191,7 +196,7 @@ class Submitter(object):
             sub['transfer_input_files'] = ','.join(transfer_files)
         
         # Determine njobs
-        njobs = self.preprocessing.variables.get('njobs', 1)
+        njobs = int(self.preprocessing.variables.get('njobs', 1))
 
         if len(self.preprocessing.split_transactions) == 0:
             logger.info('Submitting %s jobs with:\n%s', njobs, pprint.pformat(sub))

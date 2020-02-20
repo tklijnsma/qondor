@@ -133,7 +133,7 @@ def run_multiple_commands(cmds, env=None, dry=False):
     process.stdin.flush()
 
     for cmd in cmds:
-        if not(type(cmd) is str):
+        if not(is_string(cmd)):
             cmd = ' '.join(cmd)
         if not(cmd.endswith('\n')):
             cmd += '\n'

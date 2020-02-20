@@ -72,6 +72,7 @@ class Preprocessor(object):
             }
         self.split_transactions = []
         self.delayed_runtime = None
+        self.allowed_lateness = None
         self.preprocess()
 
     def get_item():
@@ -110,24 +111,10 @@ class Preprocessor(object):
             self.preprocess_line_split_transactions(line)
         elif line.startswith('delay '):
             self.preprocess_line_delay(line)
+        elif line.startswith('allowed_lateness '):
+            self.preprocess_line_allowed_lateness(line)
         else:
             self.preprocess_line_variable(line)
-
-    def preprocess_line_delay(self, line):
-        try:
-            components = line.split()[1:]
-        except ValueError:
-            logger.error('line "%s" did not have expected structure', line)
-            raise
-        unit = 's' if len(components) <= 1 else components[1]
-        conversion_to_seconds = {'s' : 1, 'm' : 60, 'h' : 3600}
-        if not unit in conversion_to_seconds:
-            raise ValueError(
-                'Delay unit should be in %s', conversion_to_seconds.keys()
-                )
-        n_seconds_delay = int(components[0]) * conversion_to_seconds[unit]
-        self.delayed_runtime = qondor.utils.get_now_utc() + datetime.timedelta(seconds=n_seconds_delay)
-        logger.debug('Jobs will sleep until %s (%s seconds in the future)', self.delayed_runtime, n_seconds_delay)
 
     def preprocess_line_htcondor(self, line):
         # Remove 'htcondor' and assume 'key value' structure further on
@@ -191,3 +178,30 @@ class Preprocessor(object):
             raise
         logger.debug('%s = %s', key, value)
         self.variables[key] = value
+
+
+    # Special keywords preprocessing
+
+    def preprocess_line_delay_or_lateness(self, line):
+        try:
+            components = line.split()[1:]
+        except ValueError:
+            logger.error('line "%s" did not have expected structure', line)
+            raise
+        unit = 's' if len(components) <= 1 else components[1]
+        conversion_to_seconds = {'s' : 1, 'm' : 60, 'h' : 3600}
+        if not unit in conversion_to_seconds:
+            raise ValueError(
+                'Delay unit should be in %s', conversion_to_seconds.keys()
+                )
+        n_seconds = int(components[0]) * conversion_to_seconds[unit]
+        return n_seconds        
+
+    def preprocess_line_delay(self, line):
+        n_seconds_delay = self.preprocess_line_delay_or_lateness(line)
+        self.delayed_runtime = qondor.utils.get_now_utc() + datetime.timedelta(seconds=n_seconds_delay)
+        logger.debug('Jobs will sleep until %s (%s seconds in the future)', self.delayed_runtime, n_seconds_delay)
+
+    def preprocess_line_allowed_lateness(self, line):
+        self.allowed_lateness = self.preprocess_line_delay_or_lateness(line)
+        logger.debug('Allowed lateness is set to %s seconds', self.allowed_lateness)
