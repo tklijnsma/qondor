@@ -115,6 +115,40 @@ class SHFile(object):
 class Submitter(object):
     """docstring for Submitter"""
 
+    @staticmethod
+    def get_default_sub_dict():
+        """
+        Returns the default submission dict (the equivalent of a .jdl file)
+        to be used by the submitter. Implemented like this to be subclassable.
+        """
+        sub = {
+            'universe' : 'vanilla',
+            'output' : 'out_$(Cluster)_$(Process).txt',
+            'error' : 'err_$(Cluster)_$(Process).txt',
+            'log' : 'log_$(Cluster)_$(Process).txt',
+            'should_transfer_files' : 'YES',
+            'environment' : {
+                'CONDOR_CLUSTER_NUMBER' : '$(Cluster)',
+                'CONDOR_PROCESS_ID' : '$(Process)',
+                'CLUSTER_SUBMISSION_TIMESTAMP' : strftime('%Y%m%d_%H%M%S'),
+                },
+            }
+        # Try to set some more things
+        try:
+            sub['x509userproxy'] = os.environ['X509_USER_PROXY']
+        except KeyError:
+            logger.warning(
+                'Could not find a x509userproxy to pass; manually '
+                'set the htcondor variable \'x509userproxy\' if your '
+                'htcondor setup requires it.'
+                )
+        try:
+            sub['environment']['USER'] = os.environ['USER']
+        except KeyError:
+            # No user specified, no big deal
+            pass
+        return sub
+
     def __init__(self, python_file, dry=False):
         super(Submitter, self).__init__()
         self.original_python_file = osp.abspath(python_file)
@@ -175,23 +209,10 @@ class Submitter(object):
             )
 
     def submit_to_htcondor(self):
-        # Make a standard submission dict
-        sub = {
-            'universe' : 'vanilla',
-            'output' : 'out_$(Cluster)_$(Process).txt',
-            'error' : 'err_$(Cluster)_$(Process).txt',
-            'log' : 'log_$(Cluster)_$(Process).txt',
-            'should_transfer_files' : 'YES',
-            'x509userproxy' : '/uscms/home/{0}/x509up_u55957'.format(os.environ['USER']),
-            'executable': osp.basename(self.shfile),
-            '+QondorRundir' : '"' + self.rundir + '"',
-            'environment' : {
-                'CONDOR_CLUSTER_NUMBER' : '$(Cluster)',
-                'CONDOR_PROCESS_ID' : '$(Process)',
-                'USER' : os.environ['USER'],
-                'CLUSTER_SUBMISSION_TIMESTAMP' : strftime('%Y%m%d_%H%M%S'),
-                },
-            }
+        sub = self.__class__.get_default_sub_dict()
+        sub['executable'] =  osp.basename(self.shfile)
+        sub['+QondorRundir']  =  '"' + self.rundir + '"'
+
         # Overwrite keys from the preprocessing
         for key, value in self.preprocessing.htcondor.iteritems():
             sub[key] = value
@@ -228,8 +249,11 @@ class Submitter(object):
             return cluster_ids, ads
 
 
-
 def htcondor_submit(sub, njobs=1, submission_dir='.'):
+    """
+    Submits the submission dict `sub` to the best scheduler.
+    Returns the cluster id and class ad of the submitted job
+    """
     import htcondor
     schedd = qondor.get_best_schedd(renew=True)
     with qondor.utils.switchdir(submission_dir):
@@ -253,4 +277,3 @@ def htcondor_format_environment(env):
             )
         + '"'
         )
-
