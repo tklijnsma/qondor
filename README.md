@@ -8,8 +8,14 @@ It requires that the `htcondor` python bindings are installed.
 ## Installation
 
 ```
+pip install qondor
+```
+
+Or from source:
+
+```
 git clone https://github.com/tklijnsma/qondor.git
-pip install --user -e qondor/
+pip install -e qondor/
 ```
 
 ## Examples
