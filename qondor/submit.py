@@ -79,14 +79,17 @@ class SHFile(object):
         for package, install_instruction in self.preprocessing.pip:
             package = package.replace('.', '-').rstrip('/')
             if install_instruction == 'module-install':
+                # Editable install: Manually give tarball, extract, and install
                 lines.extend([
                     'mkdir {0}'.format(package),
                     'tar xf {0}.tar -C {0}'.format(package),
+                    'pip install --install-option="--prefix=${{pip_install_dir}}" -e {0}/'.format(package)
                     ])
-            lines.extend([
-                'pip install --install-option="--prefix=${{pip_install_dir}}" -e {0}/'.format(package),
-                ''
-                ])
+            elif install_instruction == 'install':
+                # Non-editable install from pypi
+                lines.append(
+                    'pip install --install-option="--prefix=${{pip_install_dir}}" {0}'.format(package)
+                    )
         return lines
 
     def sleep_until_runtime(self):
