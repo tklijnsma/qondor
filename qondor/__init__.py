@@ -10,6 +10,8 @@ BATCHMODE = False
 if 'QONDOR_BATCHMODE' in os.environ:
     BATCHMODE = True
 
+COLLECTOR_NODES = None
+
 from . import schedd
 from .schedd import get_best_schedd, get_schedd_ads, wait, remove_jobs
 from .preprocess import Preprocessor, preprocessing
@@ -23,3 +25,4 @@ if os.environ.get('HOSTNAME', '').endswith('fnal.gov'):
         '/usr/lib64/python2.6/site-packages',
         '/usr/lib64/python2.7/site-packages'
         ])
+    schedd.GLOBAL_SCHEDDMAN_CLS = schedd.ScheddManagerFermiHTC
