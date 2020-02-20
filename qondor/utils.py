@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import os, shutil, logging, subprocess, glob, pprint, time, datetime
+import os, shutil, logging, subprocess, glob, pprint, time, datetime, sys
 import os.path as osp
 import qondor
 logger = logging.getLogger('qondor')
@@ -168,18 +168,18 @@ def is_string(string):
     return isinstance(string, basestring)
 
 
-def tarball_python_module(module, outdir=None, allow_uncommitted=True, dry=False):
-    """
-    Takes a python module or a path to a file of said module, goes to the associated
-    top-level git directory, and creates a tarball.
-    Will throw subprocess.CalledProcessError if there are uncommitted changes.
-    """
-    # Input variable may be a path
-    if is_string(module):
-        # Treat the input variable as a path
-        path = module
-    else:
-        # path = module.__file__
+def get_installation_path_of_module(module):
+    logger.debug(
+        'Trying to determine installation path of %s',
+        module.__name__
+        )
+    try:
+        logger.debug('Using pkg_resources')
+        import pkg_resources
+        distribution = pkg_resources.get_distribution(module.__name__)
+        path = osp.abspath(distribution.location)
+    except:
+        logger.debug('From module.__path__')
         path = osp.abspath(module.__path__[0])
         if not osp.exists(path):
             logger.warning(
@@ -195,6 +195,30 @@ def tarball_python_module(module, outdir=None, allow_uncommitted=True, dry=False
                     'module.__path__ is a relative path set at import time.',
                     path, module
                     )
+            else:
+                raise RuntimeError(
+                    'Found no way of determining where %s is installed',
+                    module.__name__
+                    )
+    logger.info(
+        'Determined installation path of %s: %s',
+        module.__name__, path
+        )
+    return path
+
+
+def tarball_python_module(module, outdir=None, allow_uncommitted=True, dry=False):
+    """
+    Takes a python module or a path to a file of said module, goes to the associated
+    top-level git directory, and creates a tarball.
+    Will throw subprocess.CalledProcessError if there are uncommitted changes.
+    """
+    # Input variable may be a path
+    if is_string(module):
+        # Treat the input variable as a path
+        path = module
+    else:
+        path = get_installation_path_of_module(module)
 
     # Make sure path exists and is a directory
     if not osp.exists(path):
@@ -396,3 +420,14 @@ def check_proxy():
             'voms-proxy-init -voms cms -valid 192:00'
             )
         raise
+
+def dist_is_editable(dist):
+    """
+    Is distribution an editable install?
+    see: https://stackoverflow.com/a/42583363/9209944
+    """
+    for path_item in sys.path:
+        egg_link = osp.join(path_item, dist.project_name + '.egg-link')
+        if osp.isfile(egg_link):
+            return True
+    return False

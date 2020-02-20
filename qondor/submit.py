@@ -197,7 +197,7 @@ class Submitter(object):
         tarball = qondor.utils.tarball_python_module(
             module,
             outdir = self.rundir,
-            dry=self.dry
+            dry = self.dry
             )
         self.transfer_files.append(tarball)
 

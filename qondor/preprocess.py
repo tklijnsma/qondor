@@ -60,7 +60,7 @@ class Preprocessor(object):
         self.htcondor = {}
         self.pip = [
             # Always pip install qondor itself
-            ('qondor', 'module-install')
+            ('qondor', self.get_pip_install_instruction('qondor'))
             ]
         self.variables = {}
         self.files = {}
@@ -74,6 +74,20 @@ class Preprocessor(object):
         self.delayed_runtime = None
         self.allowed_lateness = None
         self.preprocess()
+
+    def get_pip_install_instruction(self, package_name):
+        """
+        Checks whether a package is installed editable 
+        (i.e. via `pip install -e package`), and if so chooses
+        the module-install instruction, which means the editable code will
+        be tarred up and sent along with the job. 
+        """
+        import sys, pkg_resources
+        distribution = pkg_resources.get_distribution(package_name)
+        if qondor.utils.dist_is_editable(distribution):
+            return 'module-install'
+        else:
+            return 'install'
 
     def get_item():
         if not(len(self.split_transactions)):
