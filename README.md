@@ -29,8 +29,7 @@ and submit it with:
 qondor-submit whatever_you_called_it.py
 ```
 
-A directory called `whatever_you_called_it_YYYYMMDD_HHMMSS` will be created, and
-relevant job files will be stored in it.
+A directory called `whatever_you_called_it_YYYYMMDD_HHMMSS` will be created, a job will be submitted that runs the code in `whatever_you_called_it.py`, and relevant job files will be stored in the directory.
 
 
 
