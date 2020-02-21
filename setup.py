@@ -2,11 +2,11 @@ from setuptools import setup
 
 setup(
     name          = 'qondor',
-    version       = '0.3',
+    version       = '0.4',
     license       = 'BSD 3-Clause License',
     description   = 'Description text',
     url           = 'https://github.com/tklijnsma/qondor.git',
-    download_url  = 'https://github.com/tklijnsma/qondor/archive/v0_3.tar.gz',
+    download_url  = 'https://github.com/tklijnsma/qondor/archive/v0_4.tar.gz',
     author        = 'Thomas Klijnsma',
     author_email  = 'tklijnsm@gmail.com',
     packages      = ['qondor'],
