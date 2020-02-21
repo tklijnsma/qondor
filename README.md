@@ -98,6 +98,28 @@ qondor-submit whatever_you_called_it.py
 will copy the tarball to two worker nodes, extract the tarball, and run some commands in the CMSSW environment that was stored in the tarball (i.e. `cmsenv` is called).
 
 
+### Multiple CMSSW tarball jobs that run at some specific time
+
+Create the following python file:
+
+```
+#$ file tarball path/to/CMSSW_X_Y_Z.tar.gz
+#$ njobs 2
+#$ delay 30 m
+#$ allowed_lateness 5 m
+
+import qondor
+preprocessing = qondor.preprocessing(__file__)
+cmssw = qondor.CMSSW.from_tarball(preprocessing.files['tarball'])
+cmssw.run_commands([
+    'cd $CMSSW_BASE/src/Package/SubPackage/python',
+    'cmsRun some_cfg.py',
+    ])
+```
+
+Upon doing `qondor-submit whatever_you_called_it.py`, the scheduled run time will be set to 30 minutes in the future from now. `njobs` are submitted, and will sleep until the calculated scheduled run time. Jobs will still be allowed to start up to 5 minutes after the scheduled run time.
+
+
 ### More examples
 
 Todo
