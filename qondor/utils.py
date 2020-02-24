@@ -16,17 +16,17 @@ def _create_directory_no_checks(dirname, dry=False):
     :param dry: Don't actually create the directory, only log
     :type dry: bool, optional
     """
-    logger.warning('Creating directory {0}'.format(dirname))
+    logger.warning('Creating directory %s', dirname)
     if not dry: os.makedirs(dirname)
 
-def create_directory(dirname, force=False, must_not_exist=False, dry=False):
+def create_directory(dirname, renew=False, must_not_exist=False, dry=False):
     """
     Creates a directory if certain conditions are met.
 
     :param dirname: Name of the directory to be created
     :type dirname: str
-    :param force: Removes the directory `dirname` if it already exists
-    :type force: bool, optional
+    :param renew: Removes the directory `dirname` if it already exists
+    :type renew: bool, optional
     :param must_not_exist: Throw an OSError if the directory already exists
     :type must_not_exist: bool, optional
     :param dry: Don't actually create the directory, only log
@@ -39,11 +39,11 @@ def create_directory(dirname, force=False, must_not_exist=False, dry=False):
     if isdir:
         if must_not_exist:
             raise OSError('{0} must not exist but exists'.format(dirname))
-        elif force:
-            logger.warning('Deleting directory {0}'.format(dirname))
+        elif renew:
+            logger.warning('Deleting directory %s', dirname)
             if not dry: shutil.rmtree(dirname)
         else:
-            logger.warning('{0} already exists, not recreating')
+            logger.warning('%s already exists, not recreating', dirname)
             return
     _create_directory_no_checks(dirname, dry=dry)
 
