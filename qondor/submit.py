@@ -131,6 +131,7 @@ class Submitter(object):
             'log' : 'log_$(Cluster)_$(Process).txt',
             'should_transfer_files' : 'YES',
             'environment' : {
+                'QONDOR_BATCHMODE' : '1',
                 'CONDOR_CLUSTER_NUMBER' : '$(Cluster)',
                 'CONDOR_PROCESS_ID' : '$(Process)',
                 'CLUSTER_SUBMISSION_TIMESTAMP' : strftime('%Y%m%d_%H%M%S'),
