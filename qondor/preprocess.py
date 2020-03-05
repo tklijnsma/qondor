@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import qondor
-import logging, re, os.path as osp, datetime
+import logging, re, os.path as osp, datetime, os
 from collections import OrderedDict
 logger = logging.getLogger('qondor')
 
@@ -54,9 +54,9 @@ class Preprocessor(object):
         'install'
         ]
 
-    def __init__(self, filename):
+    def __init__(self, filename=None):
         super(Preprocessor, self).__init__()
-        self.filename = osp.abspath(filename)
+        if not(filename is None): self.filename = osp.abspath(filename)
         self.htcondor = {}
         self.pip = [
             # Always pip install qondor itself
@@ -73,7 +73,7 @@ class Preprocessor(object):
         self.split_transactions = []
         self.delayed_runtime = None
         self.allowed_lateness = None
-        self.preprocess()
+        if not(filename is None): self.preprocess()
 
     def get_pip_install_instruction(self, package_name):
         """
@@ -89,17 +89,12 @@ class Preprocessor(object):
         else:
             return 'install'
 
-    def get_item():
+    def get_item(self):
         if not(len(self.split_transactions)):
             raise RuntimeError(
                 '.get_item() should only be called if transactions are split. '
                 'Either .preprocess() is not yet called, or there is no split_transactions '
                 'directive.'
-                )
-        elif not 'QONDORITEM' in os.environ:
-            raise RuntimeError(
-                'Transactions should have been split, but no QONDORITEM was found '
-                'in the environment.'
                 )
         if qondor.BATCHMODE:
             return os.environ['QONDORITEM']

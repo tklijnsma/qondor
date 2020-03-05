@@ -16,7 +16,7 @@ class TestPreprocessing(TestCase):
     #     pass
 
     def test_line_preprocessing(self):
-        preprocessor = qondor.Preprocessor('nofile.py')
+        preprocessor = qondor.Preprocessor()
         preprocessor.preprocess_line('pip module-install svj.core')
         self.assertIn(('svj.core', 'module-install'), preprocessor.pip)
         preprocessor.preprocess_line('htcondor executable     testjob.sh')
@@ -36,7 +36,7 @@ class TestPreprocessing(TestCase):
         self.assertEquals(lines, ['somevar = somevalue'])
 
     def test_sh_file(self):
-        preprocessor = qondor.Preprocessor('nofile.py')
+        preprocessor = qondor.Preprocessor()
         preprocessor.preprocess_line('pip module-install svj.core')
         preprocessor.preprocess_line('htcondor executable     testjob.sh')
         preprocessor.preprocess_line('file cmssw_tarball CMSSW_X_X_X.tar.gz')
@@ -47,3 +47,13 @@ class TestPreprocessing(TestCase):
         self.assertEquals(lines[0], '#!/bin/bash')
         shfile.to_file('path/to/file.sh', dry=True)
 
+    def test_get_item(self):
+        preprocessor = qondor.Preprocessor()
+        preprocessor.preprocess_line('split_transactions item1 item2 item3')
+        self.assertEquals(preprocessor.get_item(), 'item1')
+        qondor.BATCHMODE = True
+        os.environ['QONDORITEM'] = 'item3'
+        self.assertEquals(preprocessor.get_item(), 'item3')
+
+    def tearDown(self):
+        qondor.BATCH_MODE = False
