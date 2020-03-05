@@ -156,6 +156,16 @@ def run_multiple_commands(cmds, env=None, dry=False):
         raise subprocess.CalledProcessError(cmd, returncode)
 
 
+def get_exitcode(cmd):
+    if is_string(cmd): cmd = [cmd]
+    logger.debug('Getting exit code for "%s"', ' '.join(cmd))
+    FNULL = open(os.devnull, 'w')
+    process = subprocess.Popen(cmd, stdout=FNULL, stderr=subprocess.STDOUT)
+    process.communicate()[0]
+    logger.debug('Got exit code %s', process.returncode)
+    return process.returncode
+
+
 def is_string(string):
     """
     Checks strictly whether `string` is a string
