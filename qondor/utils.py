@@ -441,3 +441,31 @@ def dist_is_editable(dist):
         if osp.isfile(egg_link):
             return True
     return False
+
+
+def _iter_chunkify_nrange(list_length, n_chunks):
+    """
+    Makes n_chunks chunks out of a range(list_length) list.
+    Returns empty lists if n_chunks > list_length.
+    """
+    n_per_chunk_f = float(list_length) / n_chunks
+    boundaries = [ (i*n_per_chunk_f, (i+1)*n_per_chunk_f) for i in range(n_chunks) ]
+    for left, right in boundaries:
+        indices_in_chunk = []
+        for i in range(list_length):
+            if i >= left and i < right:
+                indices_in_chunk.append(i)
+        yield indices_in_chunk
+
+def iter_chunkify(mylist, n_chunks):
+    """
+    Makes n_chunks chunks out of mylist.
+    """
+    for indices in _iter_chunkify_nrange(len(mylist), n_chunks):
+        yield [ mylist[i] for i in indices ]
+
+def chunkify(mylist, n_chunks):
+    return list(iter_chunkify(mylist, n_chunks))
+
+def get_ith_chunk(mylist, n_chunks, i_chunk):
+    return chunkify(mylist, n_chunks)[i_chunk]
