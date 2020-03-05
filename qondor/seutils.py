@@ -159,7 +159,7 @@ def ls(path):
     elif status == 0:
         # It's a directory; return contents
         contents = qondor.utils.run_command([ 'xrdfs', mgm, 'ls', path ])
-        return [ l.strip() for l in contents if not len(l.strip()) == 0 ]
+        return [ format(l.strip(), mgm=mgm) for l in contents if not len(l.strip()) == 0 ]
     else:
         raise RuntimeError('Path \'{0}\' does not exist'.format(path))
 
