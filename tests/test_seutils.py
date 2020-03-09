@@ -10,7 +10,7 @@ import qondor
 TESTDIR = osp.abspath(osp.dirname(__file__))
 
 
-class TestPreprocessing(TestCase):
+class TestSeutils(TestCase):
 
     def setUp(self):
         qondor.seutils.set_default_mgm('root://cmseos.fnal.gov')
@@ -34,3 +34,24 @@ class TestPreprocessing(TestCase):
             contents[0],
             qondor.seutils.format('/store/user/klijnsma/qondor_testing/test_numEvent5.root')
             )
+
+    def test_format(self):
+        testfile = '/store/user/klijnsma/qondor_testing/test_numEvent5.root'
+        mgm, lfn = qondor.seutils.split_mgm(testfile)
+        self.assertEqual(mgm, 'root://cmseos.fnal.gov')
+        self.assertEqual(
+            qondor.seutils.format(lfn, mgm=mgm),
+            'root://cmseos.fnal.gov//store/user/klijnsma/qondor_testing/test_numEvent5.root'
+            )
+        self.assertEqual(
+            qondor.seutils.format(lfn),
+            'root://cmseos.fnal.gov//store/user/klijnsma/qondor_testing/test_numEvent5.root'
+            )
+
+    def test_ls_root_mgm_is_okay(self):
+        contents = qondor.seutils.ls_root('/store/user/klijnsma/qondor_testing')
+        self.assertEqual(
+            contents[0],
+            'root://cmseos.fnal.gov//store/user/klijnsma/qondor_testing/test_numEvent5.root'
+            )
+
