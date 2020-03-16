@@ -100,14 +100,14 @@ class CMSSW(object):
         """
         Mostly legacy; use run_commands instead
         """
-        self.run_commands([cmd])
+        return self.run_commands([cmd])
 
     def run_commands(self, cmds):
         """
         Main/Public method: Much like run_commands_nocmsenv, but includes cmsenv
         This is intended to be called with cmsRun/cmsDriver.py commands
         """
-        self.run_commands_nocmsenv(['cmsenv'] + cmds)
+        return self.run_commands_nocmsenv(['cmsenv'] + cmds)
 
     def run_commands_nocmsenv(self, cmds):
         """
@@ -116,7 +116,7 @@ class CMSSW(object):
         """
         self.rename_project()
         with qondor.utils.switchdir(self.cmssw_src):
-            qondor.utils.run_multiple_commands(
+            return qondor.utils.run_multiple_commands(
                 [
                     'shopt -s expand_aliases',
                     'source /cvmfs/cms.cern.ch/cmsset_default.sh',

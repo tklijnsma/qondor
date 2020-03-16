@@ -141,10 +141,13 @@ def run_multiple_commands(cmds, env=None, dry=False):
         process.stdin.flush()
     process.stdin.close()
 
+    output = []
     process.stdout.flush()
     for line in iter(process.stdout.readline, ""):
         if len(line) == 0: break
-        subprocess_logger.info(line.rstrip('\n'))
+        line = line.rstrip('\n')
+        subprocess_logger.info(line)
+        output.append(line)
 
     process.stdout.close()
     process.wait()
@@ -152,6 +155,7 @@ def run_multiple_commands(cmds, env=None, dry=False):
 
     if (returncode == 0):
         logger.info('Command exited with status 0 - all good')
+        return output
     else:
         raise subprocess.CalledProcessError(cmd, returncode)
 

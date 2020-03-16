@@ -84,12 +84,15 @@ class TestCMSSW(CaseJobWithCleanup):
         passed_outfile = osp.join(TESTDIR, 'test_root_file.root')
         actual_outfile = passed_outfile.replace('.root', '_numEvent5.root')
         self.files_to_remove.append(actual_outfile)
-        cmssw.run_command([
+        output = cmssw.run_command([
             'cmsRun',
             'HGCALDev/PCaloHitWithPostionProducer/python/SingleMuPt_pythia8_cfi_GEN_SIM_PCaloHitWithPosition.py',
             'outputFile={0}'.format(passed_outfile),
             'maxEvents=5'
             ])
+        self.assertTrue(len(output) > 0)
+        logger.info('output[0]: %s', output[0])
+        logger.info('output[1]: %s', output[1])
         self.assertTrue(osp.isfile(actual_outfile))
 
     def test_extract_and_run_condor(self):
@@ -98,4 +101,6 @@ class TestCMSSW(CaseJobWithCleanup):
         cluster_id, ads = submitter.submit()
         outfile = 'root://cmseos.fnal.gov//store/user/klijnsma/qondor_testing/test.root'
         # Check and clean up manually... 
+
+
 
