@@ -29,3 +29,10 @@ if os.environ.get('HOSTNAME', '').endswith('fnal.gov'):
         ])
     schedd.GLOBAL_SCHEDDMAN_CLS = schedd.ScheddManagerFermiHTC
     DEFAULT_MGM = 'root://cmseos.fnal.gov'
+
+def get_proc_id():
+    if BATCHMODE:
+        return os.environ['PROC_ID']
+    else:
+        logger.info('Local mode - return proc_id 0')
+        return 0

@@ -64,12 +64,20 @@ class Preprocessor(object):
             ]
         self.variables = {}
         self.files = {}
-        self.env = {
-            'gccsetup' : '/cvmfs/sft.cern.ch/lcg/contrib/gcc/7/x86_64-centos7/setup.sh',
-            'pipdir' : '/cvmfs/sft.cern.ch/lcg/releases/pip/19.0.3-06476/x86_64-centos7-gcc7-opt',
-            'rootsetup' : '/cvmfs/sft.cern.ch/lcg/releases/LCG_95/ROOT/6.16.00/x86_64-centos7-gcc7-opt/ROOT-env.sh',
-            'SCRAM_ARCH' : 'slc7_amd64_gcc820',
-            }
+        if os.environ.get('SCRAM_ARCH', '').startswith('slc6'):
+            self.env = {
+                'gccsetup' : '/cvmfs/sft.cern.ch/lcg/contrib/gcc/7/x86_64-slc6-gcc7-opt/setup.sh',
+                'pipdir' : '/cvmfs/sft.cern.ch/lcg/releases/pip/19.0.3-06476/x86_64-slc6-gcc7-opt',
+                'rootsetup' : '/cvmfs/sft.cern.ch/lcg/releases/LCG_95/ROOT/6.16.00/x86_64-slc6-gcc7-opt/ROOT-env.sh',
+                'SCRAM_ARCH' : 'slc6_amd64_gcc700',
+                }
+        else:
+            self.env = {
+                'gccsetup' : '/cvmfs/sft.cern.ch/lcg/contrib/gcc/7/x86_64-centos7/setup.sh',
+                'pipdir' : '/cvmfs/sft.cern.ch/lcg/releases/pip/19.0.3-06476/x86_64-centos7-gcc7-opt',
+                'rootsetup' : '/cvmfs/sft.cern.ch/lcg/releases/LCG_95/ROOT/6.16.00/x86_64-centos7-gcc7-opt/ROOT-env.sh',
+                'SCRAM_ARCH' : 'slc7_amd64_gcc820',
+                }
         self.split_transactions = []
         self.delayed_runtime = None
         self.allowed_lateness = None
