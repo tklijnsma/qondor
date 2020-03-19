@@ -64,7 +64,8 @@ class Preprocessor(object):
             ]
         self.variables = {}
         self.files = {}
-        if os.environ.get('SCRAM_ARCH', '').startswith('slc6'):
+        if 'el6' in os.uname()[2]:
+            logger.info('Detected slc6')
             self.env = {
                 'gccsetup' : '/cvmfs/sft.cern.ch/lcg/contrib/gcc/7/x86_64-slc6-gcc7-opt/setup.sh',
                 'pipdir' : '/cvmfs/sft.cern.ch/lcg/releases/pip/19.0.3-06476/x86_64-slc6-gcc7-opt',
