@@ -32,7 +32,7 @@ if os.environ.get('HOSTNAME', '').endswith('fnal.gov'):
 
 def get_proc_id():
     if BATCHMODE:
-        return os.environ['PROC_ID']
+        return os.environ['CONDOR_PROCESS_ID'] 
     else:
         logger.info('Local mode - return proc_id 0')
         return 0
