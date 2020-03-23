@@ -289,6 +289,8 @@ class CodeSubmitter(BaseSubmitter):
         self.python_file = osp.join(self.rundir, 'pythoncode.py')
         logger.info('Writing %s lines of code to %s', len(self.python_code), self.python_file)
         with open(self.python_file, 'w') as f:
+            f.write('\n'.join(['#$ ' + l for l in self.preprocessing_code]))
+            f.write('\n')
             f.write('\n'.join(self.python_code))
         self.transfer_files.append(self.python_file)
         self.preprocessing.filename = self.python_file
