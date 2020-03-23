@@ -16,7 +16,7 @@ DEFAULT_MGM = None
 from . import schedd
 from .schedd import get_best_schedd, get_schedd_ads, wait, remove_jobs
 from .preprocess import Preprocessor, preprocessing
-from .submit import SHFile, Submitter
+from .submit import SHFile, Submitter, CodeSubmitter
 from .cmssw import CMSSW
 from . import seutils
 

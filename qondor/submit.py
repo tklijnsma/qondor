@@ -115,8 +115,14 @@ class SHFile(object):
             ]
 
 
-class Submitter(object):
-    """docstring for Submitter"""
+
+
+class BaseSubmitter(object):
+
+    def __init__(self, dry=False):
+        super(BaseSubmitter, self).__init__()
+        self.transfer_files = []
+        self.dry = dry
 
     @staticmethod
     def get_default_sub_dict():
@@ -153,47 +159,6 @@ class Submitter(object):
             pass
         return sub
 
-    def __init__(self, python_file, dry=False):
-        super(Submitter, self).__init__()
-        self.original_python_file = osp.abspath(python_file)
-
-        self.python_base = osp.basename(self.original_python_file)
-        self.python_name = self.python_base.replace('.py','')
-        self.dry = dry
-        self.preprocessing = qondor.Preprocessor(self.original_python_file)
-        self.transfer_files = []
-
-    def submit(self):
-        try:
-            self.make_rundir()
-            self.copy_python_file()
-            for package, install_instruction in self.preprocessing.pip:
-                if install_instruction == 'module-install':
-                    self.tar_python_module(package)
-            self.create_shfile()
-            return self.submit_to_htcondor()
-        except:
-            logger.error('Error during submission; cleaning up %s', self.rundir)
-            if osp.isdir(self.rundir):
-                shutil.rmtree(self.rundir)
-            raise
-
-    def make_rundir(self):
-        self.rundir = osp.abspath('qondor_{0}_{1}'.format(
-            self.python_name,
-            strftime('%Y%m%d_%H%M%S')
-            ))
-        qondor.utils.create_directory(
-            self.rundir,
-            must_not_exist=True,
-            dry=self.dry
-            )
-
-    def copy_python_file(self):
-        self.python_file = osp.join(self.rundir, self.python_base)
-        qondor.utils.copy_file(self.original_python_file, self.python_file, dry=self.dry)
-        self.transfer_files.append(self.python_file)
-
     def tar_python_module(self, module_name):
         logger.info('Creating tarball for python module %s', module_name)
         import importlib
@@ -204,13 +169,6 @@ class Submitter(object):
             dry = self.dry
             )
         self.transfer_files.append(tarball)
-
-    def create_shfile(self):
-        self.shfile = osp.join(self.rundir, self.python_name + '.sh')
-        SHFile(self.preprocessing).to_file(
-            self.shfile,
-            dry = self.dry
-            )
 
     def submit_to_htcondor(self):
         sub = self.__class__.get_default_sub_dict()
@@ -251,6 +209,95 @@ class Submitter(object):
                     cluster_ids.append(cluster_id)
                     ads.append(ad)
             return cluster_ids, ads
+
+    def create_shfile(self):
+        self.shfile = osp.join(self.rundir, self.python_name + '.sh')
+        SHFile(self.preprocessing).to_file(
+            self.shfile,
+            dry = self.dry
+            )
+
+    def make_rundir(self):
+        self.rundir = osp.abspath('qondor_{0}_{1}'.format(
+            self.python_name,
+            strftime('%Y%m%d_%H%M%S')
+            ))
+        qondor.utils.create_directory(
+            self.rundir,
+            must_not_exist=True,
+            dry=self.dry
+            )
+
+    def submit(self):
+        """
+        Main submission method
+        """
+        try:
+            return self._submit()
+        except:
+            logger.error('Error during submission; cleaning up %s', self.rundir)
+            if osp.isdir(self.rundir):
+                shutil.rmtree(self.rundir)
+            raise
+
+    def _submit(self):
+        """
+        To be subclassed
+        """
+        raise NotImplementedError
+
+    def _submit(self):
+        self.make_rundir()
+        self.copy_python_file()
+        for package, install_instruction in self.preprocessing.pip:
+            if install_instruction == 'module-install':
+                self.tar_python_module(package)
+        self.create_shfile()
+        return self.submit_to_htcondor()
+
+
+class Submitter(BaseSubmitter):
+    """
+    Standard Submitter based on a python file.
+    Upon running `.submit()`, will create a new directory,
+    transfer all relevant files from the job, and start
+    running.
+    """
+
+    def __init__(self, python_file, dry=False):
+        super(Submitter, self).__init__(dry)
+        self.original_python_file = osp.abspath(python_file)
+        self.python_base = osp.basename(self.original_python_file)
+        self.python_name = self.python_base.replace('.py','')
+        self.preprocessing = qondor.Preprocessor(self.original_python_file)
+
+    def copy_python_file(self):
+        self.python_file = osp.join(self.rundir, self.python_base)
+        qondor.utils.copy_file(self.original_python_file, self.python_file, dry=self.dry)
+        self.transfer_files.append(self.python_file)
+
+
+class CodeSubmitter(BaseSubmitter):
+    """
+    Like submitter, but rather than being instantiated from a python file
+    it is instantiated from python code in a string
+    """
+
+    def __init__(self, python_code, preprocessing_code=None, name='', dry=False):
+        super(CodeSubmitter, self).__init__(dry)
+        self.python_code = python_code.split('\n') if qondor.utils.is_string(python_code) else python_code
+        if preprocessing_code is None: preprocessing_code = []
+        self.preprocessing_code = preprocessing_code.split('\n') if qondor.utils.is_string(preprocessing_code) else preprocessing_code
+        self.python_name = name if name else 'fromcode'
+        self.preprocessing = qondor.Preprocessor.from_lines(self.preprocessing_code)
+
+    def copy_python_file(self):
+        self.python_file = osp.join(self.rundir, 'pythoncode.py')
+        logger.info('Writing %s lines of code to %s', len(self.python_code), self.python_file)
+        with open(self.python_file, 'w') as f:
+            f.write('\n'.join(self.python_code))
+        self.transfer_files.append(self.python_file)
+        self.preprocessing.filename = self.python_file
 
 
 def htcondor_submit(sub, njobs=1, submission_dir='.'):

@@ -124,8 +124,11 @@ class ScheddManager(object):
     def get_best_schedd(self):
         import htcondor
         self.get_schedd_ads()
-        self.schedd_ads.sort(key = self.get_schedd_weight)
-        best_schedd_ad = self.schedd_ads[0]
+        if len(self.schedd_ads) == 1:
+            best_schedd_ad = self.schedd_ads[0]
+        else:
+            self.schedd_ads.sort(key = self.get_schedd_weight)
+            best_schedd_ad = self.schedd_ads[0]
         logger.debug('Best schedd is %s', best_schedd_ad['Name'])
         schedd = htcondor.Schedd(best_schedd_ad)
         return schedd
@@ -192,6 +195,8 @@ def get_schedd_ads(renew=False):
 def get_schedds(renew=False):
     return _get_scheddman(renew).get_all_schedds()
 
+
+# Some basic condor utilities
 
 def get_jobs(cluster_id, proc_id=None):
     requirements = 'ClusterId=={0}'.format(cluster_id)

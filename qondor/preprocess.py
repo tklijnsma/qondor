@@ -54,6 +54,13 @@ class Preprocessor(object):
         'install'
         ]
 
+    @classmethod
+    def from_lines(cls, lines):
+        preprocessor = cls()
+        for line in lines:
+            preprocessor.preprocess_line(line)
+        return preprocessor
+
     def __init__(self, filename=None):
         super(Preprocessor, self).__init__()
         if not(filename is None): self.filename = osp.abspath(filename)
