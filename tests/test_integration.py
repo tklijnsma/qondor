@@ -76,6 +76,10 @@ class TestHelloWorld(CaseJobWithCleanup):
             'Hello world!'
             )
 
+    def test_helloworld_nofile_local(self):
+        submitter = qondor.CodeSubmitter('print(\'Hello world!\')')
+        submitter.run_local()
+
 
 class TestSplitTransactions(CaseJobWithCleanup):
 

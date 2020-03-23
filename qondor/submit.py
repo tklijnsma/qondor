@@ -241,12 +241,6 @@ class BaseSubmitter(object):
             raise
 
     def _submit(self):
-        """
-        To be subclassed
-        """
-        raise NotImplementedError
-
-    def _submit(self):
         self.make_rundir()
         self.copy_python_file()
         for package, install_instruction in self.preprocessing.pip:
@@ -299,6 +293,10 @@ class CodeSubmitter(BaseSubmitter):
         self.transfer_files.append(self.python_file)
         self.preprocessing.filename = self.python_file
 
+    def run_local(self):
+        logger.warning('Doing exec() on the following code:\n%s', '\n'.join(self.python_code))
+        logger.warning('Output:')
+        exec('\n'.join(self.python_code))
 
 def htcondor_submit(sub, njobs=1, submission_dir='.'):
     """
