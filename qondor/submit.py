@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import qondor
-import logging, os, os.path as osp, pprint, shutil
+import logging, os, os.path as osp, pprint, shutil, uuid
 from time import strftime
 logger = logging.getLogger('qondor')
 
@@ -293,10 +293,27 @@ class CodeSubmitter(BaseSubmitter):
         self.transfer_files.append(self.python_file)
         self.preprocessing.filename = self.python_file
 
-    def run_local(self):
+    def run_local_exec(self):
         logger.warning('Doing exec() on the following code:\n%s', '\n'.join(self.python_code))
+        if '__file__' in self.python_code:
+            logger.error(
+                'Note that "__file__" will crash, as it is not defined in exec(). '
+                'Use .run_local() instead.'
+                )
         logger.warning('Output:')
         exec('\n'.join(self.python_code))
+
+    def run_local(self):
+        python_file = 'temp-{0}.py'.format(uuid.uuid4())
+        logger.info('Put python code in {0} and running:'.format(python_file))
+        try:
+            with open(python_file, 'w') as f:
+                f.write('\n'.join(self.python_code))
+            return qondor.utils.run_command(['python', python_file])
+        finally:
+            logger.info('Removing %s', python_file)
+            os.remove(python_file)
+
 
 def htcondor_submit(sub, njobs=1, submission_dir='.'):
     """
