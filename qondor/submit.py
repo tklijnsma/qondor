@@ -308,6 +308,8 @@ class CodeSubmitter(BaseSubmitter):
         logger.info('Put python code in {0} and running:'.format(python_file))
         try:
             with open(python_file, 'w') as f:
+                f.write('\n'.join(['#$ ' + l for l in self.preprocessing_code]))
+                f.write('\n')
                 f.write('\n'.join(self.python_code))
             return qondor.utils.run_command(['python', python_file])
         finally:

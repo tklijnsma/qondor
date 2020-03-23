@@ -77,7 +77,7 @@ class TestHelloWorld(CaseJobWithCleanup):
             )
 
     def test_helloworld_nofile_local(self):
-        submitter = qondor.CodeSubmitter('print(\'Hello world!\')')
+        submitter = qondor.CodeSubmitter('print(\'Hello world!\')', 'testvar testvalue')
         output = submitter.run_local()
         self.assertEquals(
             [l.strip() for l in output if len(l.strip()) != 0][-1],
