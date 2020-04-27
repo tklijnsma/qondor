@@ -36,3 +36,18 @@ def get_proc_id():
     else:
         logger.info('Local mode - return proc_id 0')
         return 0
+
+def get_preproc():
+    """
+    Determines the top level python file in the stack, and calls the preprocessor on that.
+    """
+    import traceback
+    stack = traceback.extract_stack()
+    topfile = stack[0][0]
+    return preprocessing(topfile)
+
+def get_chunk():
+    """Runs the preprocessor on the top level python file, and returns the chunk for the current proc_id"""
+    chunks = get_preproc().chunks
+    if not chunks: raise RuntimeError('No chunks determined in preprocessing')
+    return chunks[get_proc_id()]

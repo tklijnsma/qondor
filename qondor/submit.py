@@ -185,7 +185,10 @@ class BaseSubmitter(object):
             sub['transfer_input_files'] = ','.join(transfer_files)
         
         # Determine njobs
-        njobs = int(self.preprocessing.variables.get('njobs', 1))
+        if self.preprocessing.chunks:
+            njobs = len(self.preprocessing.chunks)
+        else:
+            njobs = int(self.preprocessing.variables.get('njobs', 1))
 
         if len(self.preprocessing.split_transactions) == 0:
             logger.info('Submitting %s jobs with:\n%s', njobs, pprint.pformat(sub))

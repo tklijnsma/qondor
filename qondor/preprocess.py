@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import qondor
-import logging, re, os.path as osp, datetime, os
+import logging, re, os.path as osp, datetime, os, math
 from collections import OrderedDict
 logger = logging.getLogger('qondor')
 
@@ -86,6 +86,7 @@ class Preprocessor(object):
                 'rootsetup' : '/cvmfs/sft.cern.ch/lcg/releases/LCG_95/ROOT/6.16.00/x86_64-centos7-gcc7-opt/ROOT-env.sh',
                 'SCRAM_ARCH' : 'slc7_amd64_gcc820',
                 }
+        self.chunks = []
         self.split_transactions = []
         self.delayed_runtime = None
         self.allowed_lateness = None
@@ -138,8 +139,29 @@ class Preprocessor(object):
             self.preprocess_line_delay(line)
         elif line.startswith('allowed_lateness '):
             self.preprocess_line_allowed_lateness(line)
+        elif line.startswith('chunkify '):
+            self.preprocess_line_chunkify(line)
         else:
             self.preprocess_line_variable(line)
+
+    def preprocess_line_chunkify(self, line):
+        items = line.split()[2:]
+        n_items = len(items)
+        specifier = line.split()[1]
+        if specifier.startswith('n='):
+            n_chunks = int(specifier.split('=')[-1])
+        elif specifier.startswith('b='):
+            chunk_size = int(specifier.split('=')[-1])
+            n_chunks = int(math.ceil(float(n_items) / chunk_size))
+            print(n_chunks)
+        else:
+            raise RuntimeError(
+                'First argument of chunkify should be '
+                'b=... (for chunk size) or n=... (for number of chunks); '
+                'instead found {0}'
+                .format(specifier)
+                )
+        self.chunks = qondor.utils.chunkify(items, n_chunks)
 
     def preprocess_line_htcondor(self, line):
         # Remove 'htcondor' and assume 'key value' structure further on
