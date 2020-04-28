@@ -66,7 +66,7 @@ def get_chunk():
 
 def get_cluster_id():
     if BATCHMODE:
-        return os.environ['CONDOR_CLUSTER_ID']
+        return os.environ['CONDOR_CLUSTER_NUMBER']
     else:
         logger.info('Local mode - return cluster_id 1234')
         return str(1234)
