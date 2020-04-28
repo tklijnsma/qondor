@@ -1,4 +1,4 @@
-import os, os.path as osp, logging, glob, shutil
+import os, os.path as osp, logging, glob, shutil, time
 import qondor
 logger = logging.getLogger('qondor')
 
@@ -102,6 +102,34 @@ class CMSSW(object):
         self._is_externallinks = True
         logger.info('Doing scram b ExternalLinks %s', self.cmssw_src)
         self.run_commands_nocmsenv(['scram b ExternalLinks'])
+
+    def cmsrun(self, cfg_file, **kwargs):
+        """
+        Specifically runs a cmsRun command. Expects a python file, and other
+        keyword arguments are parsed as "keyword=value".
+        The key "inputFiles" is treated differently: A list is expected,
+        and every item is added as "inputFiles=item".
+        The key "outputFile" is also treated differently: The passed string
+        is formatted with keys "proc_id", "cluster_id", and "datestr" for
+        convenience.
+        """
+        cmd =  [
+            'cmsRun', cfg_file
+            ]
+        if 'inputFiles' in kwargs:
+            inputFiles = kwargs.pop('inputFiles')
+            if qondor.utils.is_string(inputFiles): inputFiles = [inputFiles]
+            for inputFile in inputFiles:
+                cmd.append('inputFiles='+inputFile)
+        if 'outputFile' in kwargs:
+            outputFile = kwargs.pop('outputFile')
+            cmd.append('outputFile=' + outputFile.format(
+                proc_id = qondor.get_proc_id(),
+                cluster_id = qondor.get_cluster_id(),
+                datestr = time.strftime('%b%d')
+                ))
+        cmd.extend([ '{0}={1}'.format(k,v) for k, v in kwargs.items() ])
+        self.run_command(cmd)
 
     def run_command(self, cmd):
         """
