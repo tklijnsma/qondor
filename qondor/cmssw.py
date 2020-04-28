@@ -2,7 +2,6 @@ import os, os.path as osp, logging, glob, shutil
 import qondor
 logger = logging.getLogger('qondor')
 
-
 class CMSSW(object):
     """docstring for CMSSW"""
 
@@ -25,6 +24,12 @@ class CMSSW(object):
     @classmethod
     def from_tarball(cls, tarball, scram_arch=None, outdir=None):
         cmssw_src = cls.extract_tarball(tarball, outdir)
+        # See if the tarball was already compiled with some scram_arch, if so use it
+        if scram_arch is None:
+            compiled_arches = glob.glob(osp.join(cmssw_src, '../bin/slc*'))
+            if compiled_arches:
+                scram_arch = osp.basename(compiled_arches[0])
+                logger.warning('Detected tarball was compiled with arch %s, using it', scram_arch)
         return cls(cmssw_src, scram_arch)
 
     @classmethod
@@ -74,11 +79,13 @@ class CMSSW(object):
         super(CMSSW, self).__init__()
         self.cmssw_src = osp.abspath(cmssw_src)
         if scram_arch is None:
-            logger.warning(
-                'Taking SCRAM_ARCH from environment; may mismatch with'
-                ' CMSSW version of %s', self.cmssw_src
-                )
-            self.scram_arch = os.environ['SCRAM_ARCH']
+            logger.warning('Attempting to find scram_arch...')
+            self.scram_arch = qondor.get_arch(cmssw_tarball)
+            # logger.warning(
+            #     'Taking SCRAM_ARCH from environment; may mismatch with'
+            #     ' CMSSW version of %s', self.cmssw_src
+            #     )
+            # self.scram_arch = os.environ['SCRAM_ARCH']
         else:
             self.scram_arch = scram_arch
         self._is_renamed = False
