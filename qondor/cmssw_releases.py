@@ -1536,8 +1536,10 @@ def get_arch(cmssw_version):
     match = re.search(r'CMSSW_\d+_\d+_\d+_.*', cmssw_version)
     if match:
         version_string_with_suffix = match.group()
+        cmssw_version = version_string_with_suffix
     else:
         version_string_with_suffix = None
+        cmssw_version = version_string
     # Find all possible arches
     version_archs = set([])
     version_with_suffix_archs = set([])

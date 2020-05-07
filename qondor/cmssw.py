@@ -79,13 +79,21 @@ class CMSSW(object):
         super(CMSSW, self).__init__()
         self.cmssw_src = osp.abspath(cmssw_src)
         if scram_arch is None:
-            logger.warning('Attempting to find scram_arch...')
-            self.scram_arch = qondor.get_arch(cmssw_tarball)
-            # logger.warning(
-            #     'Taking SCRAM_ARCH from environment; may mismatch with'
-            #     ' CMSSW version of %s', self.cmssw_src
-            #     )
-            # self.scram_arch = os.environ['SCRAM_ARCH']
+            compiled_arches = glob.glob(osp.join(self.cmssw_src, '../bin/slc*'))
+            if compiled_arches:
+                self.scram_arch = osp.basename(compiled_arches[0])
+                logger.warning('Detected CMSSW was compiled with arch %s, using it', self.scram_arch)
+            else:
+                try:
+                    logger.warning('Attempting to find scram_arch...')
+                    print(osp.basename(osp.normpath(osp.join(self.cmssw_src,'..'))))
+                    self.scram_arch = qondor.get_arch(osp.basename(osp.normpath(osp.join(self.cmssw_src,'..'))))
+                except RuntimeError:
+                    logger.warning(
+                        'Taking SCRAM_ARCH from environment; may mismatch with'
+                        ' CMSSW version of %s', self.cmssw_src
+                        )
+                    self.scram_arch = os.environ['SCRAM_ARCH']
         else:
             self.scram_arch = scram_arch
         self._is_renamed = False
