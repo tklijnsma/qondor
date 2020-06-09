@@ -168,7 +168,11 @@ class CMSSW(object):
                 env = qondor.utils.get_clean_env()
                 )
 
-    def make_tarball(self, outdir='.', tag=None, renew=True, exclude=None):
+    def make_tarball(
+        self, outdir='.', tag=None, renew=True,
+        exclude=None, exclude_vcs=True, exclude_caches_all=True,
+        include=None,
+        ):
         """
         Makes a tarball out of the CMSSW distribution of this class
         """
@@ -192,15 +196,18 @@ class CMSSW(object):
             'Tarballing {0} ==> {1}'
             .format(cmssw_path, dst)
             )
-        exclude = ['tmp'] if exclude is None
+        if exclude is None: exclude = ['tmp']
         with qondor.utils.switchdir(osp.dirname(cmssw_path)):
             cmd = [
                 'tar',
-                '--exclude-caches-all',
-                '--exclude-vcs',
                 '-zcvf',
                 dst,
-                osp.basename(cmssw_path)
                 ]
+            if include:
+                if qondor.utils.is_string(include): include = [include]
+                cmd.extend(include)
+            if exclude_vcs: cmd.append('--exclude-vcs',)
+            if exclude_caches_all: cmd.append('--exclude-caches-all',)
             cmd.extend(['--exclude={0}'.format(e) for e in exclude])
+            cmd.append(osp.basename(cmssw_path))
             qondor.utils.run_command(cmd)
