@@ -19,7 +19,7 @@ from .preprocess import Preprocessor, preprocessing
 from .submit import SHFile, Submitter, CodeSubmitter
 from .cmssw import CMSSW
 from .cmssw_releases import get_arch
-from . import seutils
+import seutils
 
 if os.environ.get('HOSTNAME', '').endswith('fnal.gov'):
     # Fix to be able to import htcondor python bindings
