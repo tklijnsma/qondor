@@ -44,7 +44,7 @@ class SHFile(object):
 
     def set_env_variables(self):
         lines = []
-        for key, value in self.preprocessing.env.iteritems():
+        for key, value in self.preprocessing.env.items():
             lines.append('export {0}={1}'.format(key, value))
         lines.append('')
         return lines
@@ -176,11 +176,11 @@ class BaseSubmitter(object):
         sub['+QondorRundir']  =  '"' + self.rundir + '"'
 
         # Overwrite keys from the preprocessing
-        for key, value in self.preprocessing.htcondor.iteritems():
+        for key, value in self.preprocessing.htcondor.items():
             sub[key] = value
 
         # Flatten files in a string
-        transfer_files = self.transfer_files + self.preprocessing.files.values()
+        transfer_files = self.transfer_files + list(self.preprocessing.files.values())
         if len(transfer_files) > 0:
             sub['transfer_input_files'] = ','.join(transfer_files)
         
@@ -346,7 +346,7 @@ def htcondor_format_environment(env):
     """
     return ('"' +
         ' '.join(
-            [ '{0}=\'{1}\''.format(key, value) for key, value in env.iteritems() ]
+            [ '{0}=\'{1}\''.format(key, value) for key, value in env.items() ]
             )
         + '"'
         )
