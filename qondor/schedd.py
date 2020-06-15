@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import qondor
-import logging, re
+import logging, re, pprint
 from time import sleep
 logger = logging.getLogger('qondor')
 
@@ -95,29 +95,45 @@ class ScheddManager(object):
     @cache_return_value
     def get_schedd_ads(self):
         import htcondor
-        self.get_collector_node_addresses()
-        for node in self.collector_node_addresses:
-            collector = htcondor.Collector(node)
-            try:
-                self.schedd_ads = collector.query(
+        schedd_ad_projection = [
+            'Name', 'MyAddress', 'MaxJobsRunning', 'ShadowsRunning',
+            'RecentDaemonCoreDutyCycle', 'TotalIdleJobs'
+            ]
+        try:
+            logger.debug('First trying default collector and schedd')
+            # This is most likely to work for most batch systems
+            collector = htcondor.Collector()
+            limited_schedd_ad = collector.locate(htcondor.DaemonTypes.Schedd)
+            logger.debug('Retrieved limited schedd ad:\n%s', pprint.pformat(limited_schedd_ad))
+            self.schedd_ads = collector.query(
                     htcondor.AdTypes.Schedd,
-                    projection = [
-                        'Name', 'MyAddress', 'MaxJobsRunning', 'ShadowsRunning',
-                        'RecentDaemonCoreDutyCycle', 'TotalIdleJobs'
-                        ],
-                    constraint = self.schedd_constraints
+                    projection = schedd_ad_projection,
+                    constraint = 'MyAddress=?="{0}"'.format(limited_schedd_ad['MyAddress'])
                     )
-                if self.schedd_ads:
-                    # As soon as schedd_ads are found in one collector node, use those
-                    # This may not be the correct choice for some batch systems
-                    break
-            except Exception as e:
-                logger.debug('Failed querying %s: %s', node, e)
-                continue
-        else:
-            logger.error('Failed to collect any schedds from %s', self.collector_node_addresses)
-            raise RuntimeError
-        logger.debug('Found schedd ads %s', self.schedd_ads)
+        except Exception as e:
+            logger.debug('Default collector and schedd did not work:\n%s\nTrying via collector host string', e)
+            self.get_collector_node_addresses()
+            for node in self.collector_node_addresses:
+                logger.debug('Querying %s for htcondor.AdTypes.Schedd', node)
+                collector = htcondor.Collector(node)
+                try:
+                    self.schedd_ads = collector.query(
+                        htcondor.AdTypes.Schedd,
+                        projection = schedd_ad_projection,
+                        constraint = self.schedd_constraints
+                        )
+                    if self.schedd_ads:
+                        # As soon as schedd_ads are found in one collector node, use those
+                        # This may not be the correct choice for some batch systems
+                        break
+                except Exception as e:
+                    logger.debug('Failed querying %s: %s', node, e)
+                    continue
+            else:
+                logger.error('Failed to collect any schedds from %s', self.collector_node_addresses)
+                raise RuntimeError
+
+        logger.debug('Found schedd ads: \n%s', pprint.pformat([dict(d) for d in self.schedd_ads]))
         return self.schedd_ads
 
     @cache_return_value
