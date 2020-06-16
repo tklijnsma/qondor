@@ -141,7 +141,8 @@ def run_multiple_commands(cmds, env=None, dry=False):
         stderr = subprocess.STDOUT,
         env = env,
         bufsize = 1,
-        close_fds = True
+        close_fds = True,
+        encoding = 'utf8'
         )
 
     # Break on first error (stdin will still be written but execution will be stopped)
