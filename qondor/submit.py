@@ -8,8 +8,9 @@ logger = logging.getLogger('qondor')
 class SHFile(object):
 
     """docstring for Preprocessor"""
-    def __init__(self, preprocessing):
+    def __init__(self, preprocessing, python_script_args=None):
         self.preprocessing = preprocessing
+        self.python_script_args = python_script_args
 
     def to_file(self, filename, dry=False):
         sh = '\n'.join(self.parse())
@@ -109,12 +110,15 @@ class SHFile(object):
             return []
 
     def python_call(self):
-        return [
-            'python {0}'.format(osp.basename(self.preprocessing.filename)),
-            ''
-            ]
-
-
+        python_cmd = 'python {0}'.format(osp.basename(self.preprocessing.filename))
+        if self.python_script_args:
+            # Add any arguments for the python script to the line too if there are any
+            try:  # py3
+                from shlex import quote
+            except ImportError:  # py2
+                from pipes import quote
+            python_cmd += ' ' + ' '.join([quote(s) for s in self.python_script_args])
+        return [python_cmd, '']
 
 
 class BaseSubmitter(object):
@@ -213,9 +217,9 @@ class BaseSubmitter(object):
                     ads.append(ad)
             return cluster_ids, ads
 
-    def create_shfile(self):
+    def create_shfile(self, python_script_args=None):
         self.shfile = osp.join(self.rundir, self.python_name + '.sh')
-        SHFile(self.preprocessing).to_file(
+        SHFile(self.preprocessing, python_script_args).to_file(
             self.shfile,
             dry = self.dry
             )
@@ -231,25 +235,25 @@ class BaseSubmitter(object):
             dry=self.dry
             )
 
-    def submit(self):
+    def submit(self, python_script_args=None):
         """
         Main submission method
         """
         try:
-            return self._submit()
+            return self._submit(python_script_args)
         except:
             logger.error('Error during submission; cleaning up %s', self.rundir)
             if osp.isdir(self.rundir):
                 shutil.rmtree(self.rundir)
             raise
 
-    def _submit(self):
+    def _submit(self, python_script_args=None):
         self.make_rundir()
         self.copy_python_file()
         for package, install_instruction in self.preprocessing.pip:
             if install_instruction == 'module-install':
                 self.tar_python_module(package)
-        self.create_shfile()
+        self.create_shfile(python_script_args)
         return self.submit_to_htcondor()
 
 
@@ -260,7 +264,6 @@ class Submitter(BaseSubmitter):
     transfer all relevant files from the job, and start
     running.
     """
-
     def __init__(self, python_file, dry=False):
         super(Submitter, self).__init__(dry)
         self.original_python_file = osp.abspath(python_file)
@@ -279,7 +282,6 @@ class CodeSubmitter(BaseSubmitter):
     Like submitter, but rather than being instantiated from a python file
     it is instantiated from python code in a string
     """
-
     def __init__(self, python_code, preprocessing_code=None, name='', dry=False):
         super(CodeSubmitter, self).__init__(dry)
         self.python_code = python_code.split('\n') if qondor.utils.is_string(python_code) else python_code
