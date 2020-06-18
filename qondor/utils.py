@@ -134,16 +134,30 @@ def run_multiple_commands(cmds, env=None, dry=False):
         logger.info('Dry mode - not running command')
         return
 
-    process = subprocess.Popen(
-        'bash',
-        stdin = subprocess.PIPE,
-        stdout = subprocess.PIPE,
-        stderr = subprocess.STDOUT,
-        env = env,
-        bufsize = 1,
-        close_fds = True,
-        encoding = 'utf8'
-        )
+    try:
+        # Python 3 accepts encoding
+        process = subprocess.Popen(
+            'bash',
+            stdin = subprocess.PIPE,
+            stdout = subprocess.PIPE,
+            stderr = subprocess.STDOUT,
+            env = env,
+            bufsize = 1,
+            close_fds = True,
+            encoding = 'utf8'
+            )
+    except TypeError:
+        # Python 2 doesn't
+        process = subprocess.Popen(
+            'bash',
+            stdin = subprocess.PIPE,
+            stdout = subprocess.PIPE,
+            stderr = subprocess.STDOUT,
+            env = env,
+            bufsize = 1,
+            close_fds = True,
+            universal_newlines = True
+            )
 
     # Break on first error (stdin will still be written but execution will be stopped)
     process.stdin.write('set -e\n')
