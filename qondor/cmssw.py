@@ -1,5 +1,5 @@
 import os, os.path as osp, logging, glob, shutil, time
-import qondor
+import qondor, seutils
 logger = logging.getLogger('qondor')
 
 class CMSSW(object):
@@ -23,6 +23,11 @@ class CMSSW(object):
 
     @classmethod
     def from_tarball(cls, tarball, scram_arch=None, outdir=None):
+        if seutils.has_protocol(tarball):
+            logger.info('Tarball %s seems to be located remote; copying', tarball)
+            dst = osp.abspath(osp.basename(tarball))
+            seutils.cp(tarball, dst)
+            tarball = dst
         cmssw_src = cls.extract_tarball(tarball, outdir)
         # See if the tarball was already compiled with some scram_arch, if so use it
         if scram_arch is None:
