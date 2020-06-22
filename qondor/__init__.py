@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import os
+import os, os.path as osp
 from .logger import setup_logger, setup_subprocess_logger
 logger = setup_logger()
 subprocess_logger = setup_subprocess_logger()
@@ -21,6 +21,10 @@ from .cmssw import CMSSW
 from .cmssw_releases import get_arch
 import seutils
 
+# Read cached ls calls if this is a job
+if BATCHMODE and osp.isfile(Preprocessor.LS_CACHE_FILE):
+    Preprocessor.read_ls_cache(Preprocessor.LS_CACHE_FILE)
+
 if os.environ.get('HOSTNAME', '').endswith('fnal.gov'):
     # Fix to be able to import htcondor python bindings
     import sys
@@ -29,7 +33,7 @@ if os.environ.get('HOSTNAME', '').endswith('fnal.gov'):
         '/usr/lib64/python2.7/site-packages'
         ])
     schedd.GLOBAL_SCHEDDMAN_CLS = schedd.ScheddManagerFermiHTC
-    DEFAULT_MGM = 'root://cmseos.fnal.gov'
+    seutils.set_default_mgm('root://cmseos.fnal.gov')
 
 
 # ___________________________________________________

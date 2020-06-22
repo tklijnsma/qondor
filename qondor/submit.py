@@ -6,8 +6,7 @@ logger = logging.getLogger('qondor')
 
 
 class SHFile(object):
-
-    """docstring for Preprocessor"""
+    """docstring"""
     def __init__(self, preprocessing, python_script_args=None):
         self.preprocessing = preprocessing
         self.python_script_args = python_script_args
@@ -219,6 +218,14 @@ class BaseSubmitter(object):
             dry=self.dry
             )
 
+    def dump_ls_cache_file(self):
+        """
+        Creates the ls cache file for the job
+        """
+        cache_file = osp.join(self.rundir, qondor.Preprocessor.LS_CACHE_FILE)
+        qondor.Preprocessor.dump_ls_cache(cache_file)
+        self.transfer_files.append(cache_file)
+
     def submit(self, python_script_args=None):
         """
         Main submission method
@@ -229,6 +236,7 @@ class BaseSubmitter(object):
         try:
             self.make_rundir()
             self.copy_python_file()
+            self.dump_ls_cache_file()
             # Loop over all 'sets'
             # If there are no subsets, this is just a len(1) iterator of the preprocessing
             for i_set, preprocessor in enumerate(self.preprocessing.sets()):

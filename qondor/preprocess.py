@@ -1,10 +1,7 @@
 # -*- coding: utf-8 -*-
-import qondor
-import logging, re, os.path as osp, datetime, os, math
-from collections import OrderedDict
+import qondor, seutils
+import logging, re, os.path as osp, datetime, os, math, glob, pprint, json
 logger = logging.getLogger('qondor')
-
-
 
 def preprocessing(filename):
     """
@@ -47,9 +44,49 @@ def get_preprocess_file(filename):
     return list(iter_preprocess_file(filename))
 
 
-
 class Preprocessor(object):
     """docstring for Preprocessor"""
+
+    # Cached output from ls calls
+    LS_CACHE_FILE = 'ls_cache.json' # Can be overwritten
+    LS_CACHE = {}
+
+    @classmethod
+    def add_ls_cache(cls, argument, is_se='auto'):
+        if argument in cls.LS_CACHE:
+            logger.info('Argument "%s" is already cached', argument)
+            return cls.get_ls_cache(argument)
+        # Check if this concerns a storage element
+        if is_se == 'auto': is_se = seutils.has_protocol(argument)
+        if is_se:
+            contents = seutils.ls_wildcard(argument)
+        else:
+            contents = [ osp.join(os.getcwd(), i) for i in glob.glob(argument)]
+        logger.debug('ls("%s") yielded:\n%s', argument, pprint.pformat(contents))
+        cls.LS_CACHE[argument] = contents
+        return contents
+
+    @classmethod
+    def get_ls_cache(cls, argument):
+        return cls.LS_CACHE[argument]
+
+    @classmethod
+    def read_ls_cache(cls, cache_file):
+        """
+        Reads a cache file into LS_CACHE
+        """
+        logger.info('Reading ls cache file %s', len(cache_file))
+        with open(cache_file, 'r') as f:
+            cls.LS_CACHE = json.load(f)
+
+    @classmethod
+    def dump_ls_cache(cls, cache_file):
+        """
+        Dumps the LS_CACHE class dict to a file
+        """
+        logger.info('Dumping ls cache (%s arguments) to %s', len(cls.LS_CACHE.keys()), cache_file)
+        with open(cache_file, 'w') as f:
+            json.dump(cls.LS_CACHE, f)
 
     # Counter for the number of subsets that have been created
     ISET = 0
@@ -64,7 +101,7 @@ class Preprocessor(object):
         """For legacy"""
         return cls(lines=lines)
 
-    def __init__(self, filename=None, lines=None, parent=None):
+    def __init__(self, filename=None, lines=None, parent=None, ls_cache_file=None):
         super(Preprocessor, self).__init__()
         self.parent = parent
         self.subsets = []
@@ -76,6 +113,9 @@ class Preprocessor(object):
         self.items = []
         self.delayed_runtime = None
         self.allowed_lateness = None
+        # File with cached output from ls processing
+        self.ls_cache = {}
+        self.ls_cache_file = ls_cache_file
         # Count how many Preprocessor instances there are
         self.subset_index = self.__class__.ISET
         self.__class__.ISET += 1
@@ -256,7 +296,8 @@ class Preprocessor(object):
     def preprocess_line_items(self, line):
         """
         Splits a line and returns a list of items, each to be processed in one job.
-        Line elements "b=<number>" and "n=<number>" are considerd chunkification parameters
+        If multiple 'items' lines are encountered, items are simply added
+        Line elements "b=<number>" and "n=<number>" are considered chunkification parameters
         """
         unprocessed_items = line.split()[1:] # Drop the keyword
         items = []
@@ -275,18 +316,32 @@ class Preprocessor(object):
                 n_chunks = None
                 continue
             else:
-                items.append(item)
+                # It's an item; see if it's meant to be expanded:
+                match = re.match(r'ls\((.*)\)', item)
+                if match:
+                    # Evaluate the ls argument
+                    argument = match.group(1)
+                    if qondor.BATCHMODE:
+                        # Only read the cache, don't execute listing
+                        contents = self.get_ls_cache(argument)
+                    else:
+                        # Add it to the cache
+                        contents = self.add_ls_cache(argument)
+                    if not len(contents): logger.warning('%s yielded no items', match.group())
+                    items.extend(contents)
+                else:
+                    items.append(item)
         n_items = len(items)
         if n_chunks is None and chunk_size is None:
             # There was no chunkification flag;
             # Use the default of 1 item per chunk, and let's not bother putting it in a list
-            self.items = items
+            self.items.extend(items)
         # Else use the chunkification parameters; items will be lists
         else:
             if chunk_size:
                 # If chunk_size is given, calculate the number of chunks that fit in the items
                 n_chunks = int(math.ceil(float(n_items) / chunk_size))
-            self.items = qondor.utils.chunkify(items, n_chunks)
+            self.items.extend(qondor.utils.chunkify(items, n_chunks))
 
     def preprocess_line_htcondor(self, line):
         # Remove 'htcondor' and assume 'key value' structure further on
