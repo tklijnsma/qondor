@@ -42,9 +42,16 @@ def get_proc_id():
         logger.info('Local mode - return proc_id 0')
         return 0
 
+def get_cluster_id():
+    if BATCHMODE:
+        return os.environ['CONDOR_CLUSTER_NUMBER']
+    else:
+        logger.info('Local mode - return cluster_id 1234')
+        return str(1234)
+
 CACHED_PREPROC = None
 
-def get_preproc(python_file=None):
+def get_master_preproc(python_file=None):
     """
     Returns and caches the preprocessing of a python file.
     By default it picks the top level python file in the stack, and calls the preprocessor on that.
@@ -58,20 +65,49 @@ def get_preproc(python_file=None):
     CACHED_PREPROC = preprocessing(python_file)
     return CACHED_PREPROC
 
-def get_chunk():
-    """Runs the preprocessor on the top level python file, and returns the chunk for the current proc_id"""
-    chunks = get_preproc().chunks
-    if not chunks: raise RuntimeError('No chunks determined in preprocessing')
-    return chunks[get_proc_id()]
-
-def get_cluster_id():
+def get_preproc():
+    """
+    Gets the preprocessing set that this job is supposed to do.
+    In local mode it just returns the first set.
+    If no sets are defined, it returns just the preprocessing.
+    """
     if BATCHMODE:
-        return os.environ['CONDOR_CLUSTER_NUMBER']
+        iset = int(os.environ['QONDORISET'])
+        for subset in get_master_preproc().sets():
+            if subset.subset_index == iset:
+                return subset
+        else:
+            raise RuntimeError(
+                'Looking for set {0} failed: no such set'
+                .format(iset)
+                )
     else:
-        logger.info('Local mode - return cluster_id 1234')
-        return str(1234)
+        logger.info('Local mode - returning simply first set')
+        return next(get_master_preproc().sets())
+
+def get_item():
+    """
+    Gets the item (string or list of strings) that this job is supposed to do.
+    In local mode it just returns the first item
+    """
+    if BATCHMODE:
+        try:
+            item = os.environ['QONDORITEM']
+            if ',' in item: item = item.split(',')
+            return item
+        except KeyError:
+            logger.error('No item was found for this job! Are you sure you passed items?')
+            raise
+    else:
+        logger.info('Local mode - returning first item')
+        items = get_master_preproc().all_items()
+        if not items: raise RuntimeError('No items determined in preprocessing')
+        return items[get_proc_id()]
 
 def init_cmssw(tarball_key='cmssw_tarball', scram_arch=None):
+    """
+    A shortcut function to quickly extract and setup a CMSSW tarball
+    """
     cmssw_tarball = get_preproc().files[tarball_key]
     cmssw = CMSSW.from_tarball(cmssw_tarball, scram_arch)
     return cmssw

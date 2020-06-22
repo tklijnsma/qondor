@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 import qondor
-import logging, os, os.path as osp, pprint, shutil, uuid
+import logging, os, os.path as osp, pprint, shutil, uuid, re
 from time import strftime
 logger = logging.getLogger('qondor')
 
@@ -112,7 +112,7 @@ class SHFile(object):
     def python_call(self):
         python_cmd = 'python {0}'.format(osp.basename(self.preprocessing.filename))
         if self.python_script_args:
-            # Add any arguments for the python script to the line too if there are any
+            # Add any arguments for the python script to this line
             try:  # py3
                 from shlex import quote
             except ImportError:  # py2
@@ -127,6 +127,7 @@ class BaseSubmitter(object):
         super(BaseSubmitter, self).__init__()
         self.transfer_files = []
         self.dry = dry
+        self._created_python_module_tarballs = []
 
     @staticmethod
     def get_default_sub_dict():
@@ -164,6 +165,9 @@ class BaseSubmitter(object):
         return sub
 
     def tar_python_module(self, module_name):
+        if module_name in self._created_python_module_tarballs:
+            logger.debug('Not tarring up %s again, tarball already created', module_name)
+            return
         logger.info('Creating tarball for python module %s', module_name)
         import importlib
         module = importlib.import_module(module_name)
@@ -173,56 +177,36 @@ class BaseSubmitter(object):
             dry = self.dry
             )
         self.transfer_files.append(tarball)
+        self._created_python_module_tarballs.append(module_name)
 
-    def submit_to_htcondor(self):
+    def submit_to_htcondor(self, shfile, preprocessor):
         sub = self.__class__.get_default_sub_dict()
-        sub['executable'] =  osp.basename(self.shfile)
+        sub['executable'] =  osp.basename(shfile)
         sub['+QondorRundir']  =  '"' + self.rundir + '"'
-
         # Overwrite keys from the preprocessing
-        for key, value in self.preprocessing.htcondor.items():
-            sub[key] = value
-
-        # Flatten files in a string
-        transfer_files = self.transfer_files + list(self.preprocessing.files.values())
+        sub.update(preprocessor.htcondor)
+        # Flatten files into a string
+        transfer_files = self.transfer_files + list(preprocessor.files.values())
         if len(transfer_files) > 0:
             sub['transfer_input_files'] = ','.join(transfer_files)
-        
-        # Determine njobs
-        if self.preprocessing.chunks:
-            njobs = len(self.preprocessing.chunks)
-        else:
-            njobs = int(self.preprocessing.variables.get('njobs', 1))
-
-        if len(self.preprocessing.split_transactions) == 0:
+        # Simple case with no items; just use the njobs variable        
+        if not preprocessor.items:
+            njobs = int(preprocessor.variables.get('njobs', 1))
             logger.info('Submitting %s jobs with:\n%s', njobs, pprint.pformat(sub))
             sub['environment'] = htcondor_format_environment(sub['environment'])
             if not self.dry:
                 return htcondor_submit(sub, njobs, submission_dir=self.rundir)
-        else:
-            cluster_ids = []
-            ads = []
-            for item in self.preprocessing.split_transactions:
-                subcopy = sub.copy()
-                # Give it an env variable
-                subcopy['environment']['QONDORITEM'] = item
-                subcopy['environment'] = htcondor_format_environment(subcopy['environment'])
-                logger.info(
-                    'Submitting %s jobs for item %s with:\n%s',
-                    njobs, item, pprint.pformat(subcopy)
-                    )
-                if not self.dry:
-                    cluster_id, ad = htcondor_submit(subcopy, njobs, submission_dir=self.rundir)
-                    cluster_ids.append(cluster_id)
-                    ads.append(ad)
-            return cluster_ids, ads
-
-    def create_shfile(self, python_script_args=None):
-        self.shfile = osp.join(self.rundir, self.python_name + '.sh')
-        SHFile(self.preprocessing, python_script_args).to_file(
-            self.shfile,
-            dry = self.dry
-            )
+        # Otherwise continue processing items
+        # njobs = 1
+        # logger.info(
+        #     'Submitting %s jobs for item %s with:\n%s',
+        #     njobs, item, pprint.pformat(subcopy)
+        #     )
+        logger.info('Items:\n%s', pprint.pformat(preprocessor.items))
+        if not self.dry:
+            subcopy = sub.copy()
+            subcopy['environment']['QONDORISET'] = str(preprocessor.subset_index)
+            return htcondor_submit(subcopy, 1, items=preprocessor.items)
 
     def make_rundir(self):
         self.rundir = osp.abspath('qondor_{0}_{1}'.format(
@@ -239,22 +223,34 @@ class BaseSubmitter(object):
         """
         Main submission method
         """
+        all_cluster_ids = []
+        all_ads = []
+        at_least_one_job_submitted = False
         try:
-            return self._submit(python_script_args)
+            self.make_rundir()
+            self.copy_python_file()
+            # Loop over all 'sets'
+            # If there are no subsets, this is just a len(1) iterator of the preprocessing
+            for i_set, preprocessor in enumerate(self.preprocessing.sets()):
+                # Create tarballs for local python modules
+                for package, install_instruction in preprocessor.pip:
+                    if install_instruction == 'module-install':
+                        self.tar_python_module(package)
+                # Create the bash script entry point for this job
+                shfile = osp.join(self.rundir, '{0}_{1}.sh'.format(self.python_name, i_set))
+                SHFile(preprocessor, python_script_args).to_file(shfile, dry=self.dry)
+                # Submit jobs to htcondor
+                cluster_id, ads = self.submit_to_htcondor(shfile, preprocessor)
+                all_cluster_ids.append(cluster_id)
+                all_ads.extend(ads)
+                at_least_one_job_submitted = True
+            return all_cluster_ids, all_ads
         except:
-            logger.error('Error during submission; cleaning up %s', self.rundir)
-            if osp.isdir(self.rundir):
-                shutil.rmtree(self.rundir)
+            if not at_least_one_job_submitted:
+                logger.error('Error during submission; cleaning up %s', self.rundir)
+                if osp.isdir(self.rundir):
+                    shutil.rmtree(self.rundir)
             raise
-
-    def _submit(self, python_script_args=None):
-        self.make_rundir()
-        self.copy_python_file()
-        for package, install_instruction in self.preprocessing.pip:
-            if install_instruction == 'module-install':
-                self.tar_python_module(package)
-        self.create_shfile(python_script_args)
-        return self.submit_to_htcondor()
 
 
 class Submitter(BaseSubmitter):
@@ -324,20 +320,57 @@ class CodeSubmitter(BaseSubmitter):
             os.remove(python_file)
 
 
-def htcondor_submit(sub, njobs=1, submission_dir='.'):
+def htcondor_submit(sub, njobs=1, submission_dir='.', items=None):
     """
     Submits the submission dict `sub` to the best scheduler.
     Returns the cluster id and class ad of the submitted job
     """
     import htcondor
     schedd = qondor.get_best_schedd(renew=True)
+    # Create a copy to keep original dict unmodified
+    # Make the transaction
     with qondor.utils.switchdir(submission_dir):
-        submit_object = htcondor.Submit(sub)
         with schedd.transaction() as transaction:
-            ad = []
-            cluster_id = submit_object.queue(transaction, njobs, ad)
-            cluster_id = int(cluster_id)
-    return cluster_id, ad
+            if items:
+                # Items logic: Turn any potential list into a ','-separated string,
+                # and set the environment variable QONDORITEM to that string.
+                ads = []
+                subcopy = sub.copy()
+                subcopy['environment']['QONDORITEM'] = 'placeholder' # Placeholder
+                subcopy['environment'] = htcondor_format_environment(subcopy['environment'])
+                submit_object = htcondor.Submit(subcopy)
+                for item in items:
+                    # Ensure the string will be ',' separated (a len-1 list will not have a comma)
+                    # Also ensure there are no quotes in it, which would screw up condor's reading
+                    if qondor.utils.is_string(item): item = [item]
+                    item = ','.join([i.replace('\'','').replace('"','') for i in item])
+                    # Change the env variable in the submitobject
+                    change_submitobject_env_variable(submit_object, 'QONDORITEM', item)
+                    # Submit again and record cluster_id and job ads
+                    ad = []
+                    cluster_id = submit_object.queue(transaction, njobs, ad)
+                    cluster_id = int(cluster_id)
+                    ads.extend(ad)
+            else:
+                subcopy = sub.copy()
+                subcopy['environment'] = htcondor_format_environment(subcopy['environment'])
+                submit_object = htcondor.Submit(subcopy)
+                ads = []
+                cluster_id = submit_object.queue(transaction, njobs, ads)
+                cluster_id = int(cluster_id)
+    logger.info('Submitted %s jobs to cluster %s', len(ads), cluster_id)
+    return cluster_id, ads
+
+
+def change_submitobject_env_variable(submitobject, key, value):
+    """
+    Tries to replace an environment variable in a Submit-object.
+    This hack is needed to have items be in the same cluster.
+    """
+    env = submitobject['environment']
+    new_env = re.sub(key + r'=\'.*?\'', '{0}=\'{1}\''.format(key, value), env)
+    logger.debug('Replacing:\n  %s\n  by\n  %s', env, new_env)
+    submitobject['environment'] = new_env
 
 
 def htcondor_format_environment(env):

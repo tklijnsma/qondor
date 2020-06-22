@@ -19,7 +19,9 @@ def iter_preprocess_lines(lines):
         line = line.strip()
         if line.startswith('#$'):
             line = line.lstrip('#$').strip()
-            if line.endswith('\\'):
+            if len(line) == 0:
+                continue
+            elif line.endswith('\\'):
                 # Line continuation
                 _linebreak_cache += line[:-1].strip() + ' '
                 logger.debug('Line continuation: set _linebreak_cache to "%s"', _linebreak_cache)
@@ -49,6 +51,9 @@ def get_preprocess_file(filename):
 class Preprocessor(object):
     """docstring for Preprocessor"""
 
+    # Counter for the number of subsets that have been created
+    ISET = 0
+
     allowed_pip_install_instructions = [
         'module-install',
         'install'
@@ -56,41 +61,96 @@ class Preprocessor(object):
 
     @classmethod
     def from_lines(cls, lines):
-        preprocessor = cls()
-        for line in lines:
-            preprocessor.preprocess_line(line)
-        return preprocessor
+        """For legacy"""
+        return cls(lines=lines)
 
-    def __init__(self, filename=None):
+    def __init__(self, filename=None, lines=None, parent=None):
         super(Preprocessor, self).__init__()
-        if not(filename is None): self.filename = osp.abspath(filename)
+        self.parent = parent
+        self.subsets = []
         self.htcondor = {}
-        self.pip = [
-            # Always pip install qondor itself
-            ('qondor', self.get_pip_install_instruction('qondor'))
-            ]
+        self.pip = []
+        self.env = {}
         self.variables = {}
         self.files = {}
-        if 'el6' in os.uname()[2]:
-            logger.info('Detected slc6')
-            self.env = {
-                'gccsetup' : '/cvmfs/sft.cern.ch/lcg/contrib/gcc/7/x86_64-slc6-gcc7-opt/setup.sh',
-                'pipdir' : '/cvmfs/sft.cern.ch/lcg/releases/pip/19.0.3-06476/x86_64-slc6-gcc7-opt',
-                'rootsetup' : '/cvmfs/sft.cern.ch/lcg/releases/LCG_95/ROOT/6.16.00/x86_64-slc6-gcc7-opt/ROOT-env.sh',
-                'SCRAM_ARCH' : 'slc6_amd64_gcc700',
-                }
-        else:
-            self.env = {
-                'gccsetup' : '/cvmfs/sft.cern.ch/lcg/contrib/gcc/7/x86_64-centos7/setup.sh',
-                'pipdir' : '/cvmfs/sft.cern.ch/lcg/releases/pip/19.0.3-06476/x86_64-centos7-gcc7-opt',
-                'rootsetup' : '/cvmfs/sft.cern.ch/lcg/releases/LCG_95/ROOT/6.16.00/x86_64-centos7-gcc7-opt/ROOT-env.sh',
-                'SCRAM_ARCH' : 'slc7_amd64_gcc820',
-                }
-        self.chunks = []
-        self.split_transactions = []
+        self.items = []
         self.delayed_runtime = None
         self.allowed_lateness = None
-        if not(filename is None): self.preprocess()
+        # Count how many Preprocessor instances there are
+        self.subset_index = self.__class__.ISET
+        self.__class__.ISET += 1
+        if self.is_master():
+            # It's the master Preprocessor instance; set some defaults
+            self.pip = [
+                # Always pip install qondor itself
+                ('qondor', self.get_pip_install_instruction('qondor'))
+                ]
+            if 'el6' in os.uname()[2]:
+                logger.info('Detected slc6')
+                self.env = {
+                    'gccsetup' : '/cvmfs/sft.cern.ch/lcg/contrib/gcc/7/x86_64-slc6-gcc7-opt/setup.sh',
+                    'pipdir' : '/cvmfs/sft.cern.ch/lcg/releases/pip/19.0.3-06476/x86_64-slc6-gcc7-opt',
+                    'rootsetup' : '/cvmfs/sft.cern.ch/lcg/releases/LCG_95/ROOT/6.16.00/x86_64-slc6-gcc7-opt/ROOT-env.sh',
+                    'SCRAM_ARCH' : 'slc6_amd64_gcc700',
+                    }
+            else:
+                self.env = {
+                    'gccsetup' : '/cvmfs/sft.cern.ch/lcg/contrib/gcc/7/x86_64-centos7/setup.sh',
+                    'pipdir' : '/cvmfs/sft.cern.ch/lcg/releases/pip/19.0.3-06476/x86_64-centos7-gcc7-opt',
+                    'rootsetup' : '/cvmfs/sft.cern.ch/lcg/releases/LCG_95/ROOT/6.16.00/x86_64-centos7-gcc7-opt/ROOT-env.sh',
+                    'SCRAM_ARCH' : 'slc7_amd64_gcc820',
+                    }
+        # Read lines if necessary
+        if filename and not lines:
+            self.filename = osp.abspath(filename)
+            self.preprocess()
+        elif lines and not filename:
+            self.preprocess_lines(lines)
+        elif lines and filename:
+            raise ValueError('Pass either filename or lines as an init argument')
+
+    def is_master(self):
+        return self.parent is None # Should only be true for the master processor
+
+    def merge(self, base):
+        """
+        Takes base preprocessor variables and adds self on top of it, so that base things are inherited
+        """
+        # Overwrite style:
+        self.htcondor = dict(base.htcondor, **self.htcondor)
+        self.variables = dict(base.variables, **self.variables)
+        self.env = dict(base.env, **self.env)
+        self.files = dict(base.files, **self.files)
+        if hasattr(base, 'filename'): self.filename = base.filename
+        if self.delayed_runtime is None: self.delayed_runtime = base.delayed_runtime
+        if self.allowed_lateness is None: self.allowed_lateness = base.allowed_lateness
+        # Append style:
+        self.items = base.items + self.items
+        self.pip = base.pip + self.pip
+
+    def sets(self):
+        """
+        Iteratively loops through subsets, updates with parent variables,
+        and yields the lowest level subsets (i.e. ones without children).
+        Each subset is a full Preprocessor instance.
+        """
+        if len(self.subsets) == 0:
+            yield self
+        else:
+            for subset in self.subsets:
+                subset.merge(self)
+                # Iterate
+                for s in subset.sets():
+                    yield s
+
+    def all_items(self):
+        """
+        Returns all items of subsets below.
+        """
+        all_items = []
+        for s in self.sets():
+            all_items.extend(s.items)
+        return all_items
 
     def get_pip_install_instruction(self, package_name):
         """
@@ -120,11 +180,62 @@ class Preprocessor(object):
             return self.split_transactions[0]
 
     def preprocess(self):
-        for line in iter_preprocess_file(self.filename):
-            self.preprocess_line(line)
+        """
+        Wrapper for self.preprocess_lines that just takes a path to a file
+        rather than direct lines
+        """
+        # Pass the list rather than the iterator, since sets might make slices
+        self.preprocess_lines(get_preprocess_file(self.filename))
+
+    def preprocess_lines(self, lines):
+        # Preprocesses a list of lines
+        # Starts a subset upon encountering the keyword 'set'
+        line_iterator = enumerate(lines)
+        for i_line, line in line_iterator:
+            logger.debug('Processing l%s: %s', i_line, line)
+            line = line.strip()
+            if len(line) == 0:
+                continue
+            elif line.startswith('endset'):
+                # This marks the end of a set, so stop preprocessing lines in this processor
+                # If this preprocessor is the master, an endset must have been encountered without
+                # a matching starting set-line
+                if self.is_master():
+                    raise ValueError(
+                        'Encountered endset without a matching opening set:\n'
+                        '--> l{0}: {1}'.format(i_line, line)
+                        )
+                # Return the line index so that the parent processor can skip the lines processed
+                # in this set.
+                # Note this line number will be the 'local' line number of the subset of lines
+                # that was passed to the child processor
+                logger.debug('Closing set at line %s', i_line)
+                return i_line
+            elif line.startswith('set ') or line == 'set':
+                # Start a subset from this line forward
+                logger.debug('Starting new set')
+                subset = Preprocessor(parent=self)
+                self.subsets.append(subset)
+                i_line_endset = subset.preprocess_lines(lines[i_line+1:])
+                # Skip lines processed in the subset
+                for i in range(i_line_endset+1):
+                    try:
+                        i_line_skip, line_skip = next(line_iterator)
+                        logger.debug('Skipping l%s: "%s" (already used in subset)', i_line_skip, line_skip)
+                    except StopIteration:
+                        # If this happens there is a bug in the code
+                        logger.error('StopIteration occured while skipping lines in a subset')
+                        raise
+                continue
+            else:
+                self.preprocess_line(line)
+        # Only the master should make it to here - subsets should be closed with an endset tag
+        if not self.is_master():
+            raise ValueError(
+                'Encountered EOF without an expected closing endset'
+                )
 
     def preprocess_line(self, line):
-        logger.debug('Processing line: %s', line)
         if   line.startswith('htcondor '):
             self.preprocess_line_htcondor(line)
         elif line.startswith('pip '):
@@ -133,35 +244,49 @@ class Preprocessor(object):
             self.preprocess_line_file(line)
         elif line.startswith('env '):
             self.preprocess_line_env(line)
-        elif line.startswith('split_transactions '):
-            self.preprocess_line_split_transactions(line)
         elif line.startswith('delay '):
             self.preprocess_line_delay(line)
         elif line.startswith('allowed_lateness '):
             self.preprocess_line_allowed_lateness(line)
-        elif line.startswith('chunkify '):
-            self.preprocess_line_chunkify(line)
+        elif line.startswith('items '):
+            self.preprocess_line_items(line)
         else:
             self.preprocess_line_variable(line)
 
-    def preprocess_line_chunkify(self, line):
-        items = line.split()[2:]
+    def preprocess_line_items(self, line):
+        """
+        Splits a line and returns a list of items, each to be processed in one job.
+        Line elements "b=<number>" and "n=<number>" are considerd chunkification parameters
+        """
+        unprocessed_items = line.split()[1:] # Drop the keyword
+        items = []
+        n_chunks = None
+        chunk_size = None
+        for item in unprocessed_items:
+            # If an 'item' starts with n= or b=, read that value and don't consider it
+            # an item to process. These 'flags' are to configure the chunkification.
+            # Only the last parameter counts, any previous parameter will be overwritten.
+            if item.startswith('n='):
+                n_chunks = int(item.split('=')[-1])
+                chunk_size = None
+                continue
+            elif item.startswith('b='):
+                chunk_size = int(item.split('=')[-1])
+                n_chunks = None
+                continue
+            else:
+                items.append(item)
         n_items = len(items)
-        specifier = line.split()[1]
-        if specifier.startswith('n='):
-            n_chunks = int(specifier.split('=')[-1])
-        elif specifier.startswith('b='):
-            chunk_size = int(specifier.split('=')[-1])
-            n_chunks = int(math.ceil(float(n_items) / chunk_size))
-            print(n_chunks)
+        if n_chunks is None and chunk_size is None:
+            # There was no chunkification flag;
+            # Use the default of 1 item per chunk, and let's not bother putting it in a list
+            self.items = items
+        # Else use the chunkification parameters; items will be lists
         else:
-            raise RuntimeError(
-                'First argument of chunkify should be '
-                'b=... (for chunk size) or n=... (for number of chunks); '
-                'instead found {0}'
-                .format(specifier)
-                )
-        self.chunks = qondor.utils.chunkify(items, n_chunks)
+            if chunk_size:
+                # If chunk_size is given, calculate the number of chunks that fit in the items
+                n_chunks = int(math.ceil(float(n_items) / chunk_size))
+            self.items = qondor.utils.chunkify(items, n_chunks)
 
     def preprocess_line_htcondor(self, line):
         # Remove 'htcondor' and assume 'key value' structure further on
@@ -212,13 +337,6 @@ class Preprocessor(object):
             raise
         logger.debug('(environment) %s = %s', key, value)
         self.env[key] = value
-
-    def preprocess_line_split_transactions(self, line):
-        self.split_transactions = line.split()[1:]
-        if not len(self.split_transactions):
-            logger.error('line "%s" did not have expected structure', line)
-            raise ValueError
-        logger.debug('Will split transactions per items: %s', self.split_transactions)
 
     def preprocess_line_variable(self, line):
         try:
