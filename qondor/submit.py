@@ -196,16 +196,11 @@ class BaseSubmitter(object):
             if not self.dry:
                 return htcondor_submit(sub, njobs, submission_dir=self.rundir)
         # Otherwise continue processing items
-        # njobs = 1
-        # logger.info(
-        #     'Submitting %s jobs for item %s with:\n%s',
-        #     njobs, item, pprint.pformat(subcopy)
-        #     )
         logger.info('Items:\n%s', pprint.pformat(preprocessor.items))
         if not self.dry:
             subcopy = sub.copy()
             subcopy['environment']['QONDORISET'] = str(preprocessor.subset_index)
-            return htcondor_submit(subcopy, 1, items=preprocessor.items)
+            return htcondor_submit(subcopy, 1, submission_dir=self.rundir, items=preprocessor.items)
 
     def make_rundir(self):
         self.rundir = osp.abspath('qondor_{0}_{1}'.format(
