@@ -151,11 +151,14 @@ class BaseSubmitter(object):
         try:
             sub['x509userproxy'] = os.environ['X509_USER_PROXY']
         except KeyError:
-            logger.warning(
-                'Could not find a x509userproxy to pass; manually '
-                'set the htcondor variable \'x509userproxy\' if your '
-                'htcondor setup requires it.'
-                )
+            try:
+                sub['x509userproxy'] = qondor.utils.run_command(['voms-proxy-info', '-path'])
+            except:
+                logger.warning(
+                    'Could not find a x509userproxy to pass; manually '
+                    'set the htcondor variable \'x509userproxy\' if your '
+                    'htcondor setup requires it.'
+                    )
         try:
             sub['environment']['USER'] = os.environ['USER']
         except KeyError:
@@ -192,7 +195,6 @@ class BaseSubmitter(object):
         if not preprocessor.items:
             njobs = int(preprocessor.variables.get('njobs', 1))
             logger.info('Submitting %s jobs with:\n%s', njobs, pprint.pformat(sub))
-            sub['environment'] = htcondor_format_environment(sub['environment'])
             if not self.dry:
                 return htcondor_submit(sub, njobs, submission_dir=self.rundir)
         # Otherwise continue processing items
