@@ -75,7 +75,7 @@ class Preprocessor(object):
         """
         Reads a cache file into LS_CACHE
         """
-        logger.info('Reading ls cache file %s', len(cache_file))
+        logger.info('Reading ls cache file %s', cache_file)
         with open(cache_file, 'r') as f:
             cls.LS_CACHE = json.load(f)
 

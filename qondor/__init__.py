@@ -115,3 +115,9 @@ def init_cmssw(tarball_key='cmssw_tarball', scram_arch=None):
     cmssw_tarball = get_preproc().files[tarball_key]
     cmssw = CMSSW.from_tarball(cmssw_tarball, scram_arch)
     return cmssw
+
+def get_var(variable):
+    """
+    Shortcut to get a variable defined in the preprocessing
+    """
+    return get_preproc().variables[variable]

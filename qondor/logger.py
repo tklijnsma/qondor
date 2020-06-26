@@ -21,7 +21,7 @@ def setup_logger(name='qondor', fmt=None):
             fmt = logging.Formatter(
                 fmt = (
                     colored(
-                        '[qondor|%(levelname)8s|%(asctime)s|%(module)s]:',
+                        '[{0}|%(levelname)8s|%(asctime)s|%(module)s]:'.format(name),
                         'yellow'
                         )
                     + ' %(message)s'
