@@ -375,9 +375,9 @@ class Preprocessor(object):
             logger.debug('BATCHMODE: %s --> %s', path, osp.basename(path))
             path = osp.basename(path)
         else:
-            if not osp.isabs(path):
+            if not seutils.has_protocol(path) and not osp.isabs(path):
                 if hasattr(self, 'filename'):
-                    # Make sure path is relative to the file that is preprocessed
+                    # Make sure path is relative to the python file that is preprocessed
                     path = osp.abspath(osp.join(osp.dirname(self.filename), path))
                 else:
                     path = osp.abspath(path)

@@ -26,7 +26,10 @@ class CMSSW(object):
         if seutils.has_protocol(tarball):
             logger.info('Tarball %s seems to be located remote; copying', tarball)
             dst = osp.abspath(osp.basename(tarball))
-            seutils.cp(tarball, dst)
+            if osp.isfile(dst):
+                logger.warning('Using pre-existing tarball %s', dst)
+            else:
+                seutils.cp(tarball, dst)
             tarball = dst
         cmssw_src = cls.extract_tarball(tarball, outdir)
         # See if the tarball was already compiled with some scram_arch, if so use it
