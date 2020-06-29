@@ -215,6 +215,7 @@ class BaseSubmitter(object):
         sub = self.__class__.get_default_sub_dict()
         sub['executable'] =  osp.basename(shfile)
         sub['+QondorRundir']  =  '"' + self.rundir + '"'
+        sub['environment']['QONDORISET'] = str(preprocessor.subset_index)
         # Overwrite keys from the preprocessing
         sub.update(preprocessor.htcondor)
         # Flatten files into a string, excluding files on storage elements
@@ -231,7 +232,6 @@ class BaseSubmitter(object):
         logger.info('Items:\n%s', pprint.pformat(preprocessor.items))
         if not self.dry:
             subcopy = sub.copy()
-            subcopy['environment']['QONDORISET'] = str(preprocessor.subset_index)
             return htcondor_submit(subcopy, 1, submission_dir=self.rundir, items=preprocessor.items)
 
     def make_rundir(self):
@@ -365,12 +365,12 @@ def htcondor_submit(sub, njobs=1, submission_dir='.', items=None):
     # Create a copy to keep original dict unmodified
     # Make the transaction
     with qondor.utils.switchdir(submission_dir):
+        subcopy = sub.copy()
         with schedd.transaction() as transaction:
             if items:
                 # Items logic: Turn any potential list into a ','-separated string,
                 # and set the environment variable QONDORITEM to that string.
                 ads = []
-                subcopy = sub.copy()
                 subcopy['environment']['QONDORITEM'] = 'placeholder' # Placeholder
                 subcopy['environment'] = htcondor_format_environment(subcopy['environment'])
                 submit_object = htcondor.Submit(subcopy)
@@ -387,7 +387,6 @@ def htcondor_submit(sub, njobs=1, submission_dir='.', items=None):
                     cluster_id = int(cluster_id)
                     ads.extend(ad)
             else:
-                subcopy = sub.copy()
                 subcopy['environment'] = htcondor_format_environment(subcopy['environment'])
                 submit_object = htcondor.Submit(subcopy)
                 ads = []
