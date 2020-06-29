@@ -93,6 +93,7 @@ class Preprocessor(object):
 
     allowed_pip_install_instructions = [
         'module-install',
+        'pypi-install',
         'install'
         ]
 
@@ -202,9 +203,11 @@ class Preprocessor(object):
         import sys, pkg_resources
         distribution = pkg_resources.get_distribution(package_name)
         if qondor.utils.dist_is_editable(distribution):
-            return 'module-install'
+            instruction = 'module-install'
         else:
-            return 'install'
+            instruction = 'pypi-install'
+        logger.debug('Determined install instruction %s for package %s', instruction, package_name)
+        return instruction
 
     def get_item(self):
         if not(len(self.split_transactions)):
@@ -362,6 +365,8 @@ class Preprocessor(object):
         if not install_instruction in self.allowed_pip_install_instructions:
             logger.error('pip install_instruction %s is not valid', install_instruction)
             raise ValueError
+        # If plain 'install', check whether it's from pypi or an editable package to be tarballed up
+        if install_instruction == 'install': install_instruction = self.get_pip_install_instruction(value)
         logger.debug('pip %s %s', install_instruction, value)
         self.pip.append((value, install_instruction))
 
@@ -371,11 +376,16 @@ class Preprocessor(object):
         except ValueError:
             logger.error('line "%s" did not have expected structure', line)
             raise
-        if qondor.BATCHMODE:
+        if seutils.has_protocol(path):
+            # Do nothing; files on an SE need no processing
+            pass
+        elif qondor.BATCHMODE:
             logger.debug('BATCHMODE: %s --> %s', path, osp.basename(path))
             path = osp.basename(path)
         else:
-            if not seutils.has_protocol(path) and not osp.isabs(path):
+            # Make sure path will be absolute
+            # If path is currently relative, assume it's relative w.r.t. to the python file
+            if not osp.isabs(path):
                 if hasattr(self, 'filename'):
                     # Make sure path is relative to the python file that is preprocessed
                     path = osp.abspath(osp.join(osp.dirname(self.filename), path))

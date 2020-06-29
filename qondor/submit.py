@@ -86,7 +86,7 @@ class SHFile(object):
                     'tar xf {0}.tar -C {0}'.format(package),
                     'pip install --install-option="--prefix=${{pip_install_dir}}" -e {0}/'.format(package)
                     ])
-            elif install_instruction == 'install':
+            elif install_instruction == 'pypi-install':
                 # Non-editable install from pypi
                 lines.append(
                     'pip install --install-option="--prefix=${{pip_install_dir}}" {0}'.format(package)

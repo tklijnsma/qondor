@@ -252,12 +252,19 @@ def get_installation_path_of_module(module):
     return path
 
 
-def tarball_python_module(module, outdir=None, allow_uncommitted=True, dry=False):
+def tarball_python_module(module, outdir=None, allow_uncommitted=True, dry=False, assume_pypi=True):
     """
-    Takes a python module or a path to a file of said module, goes to the associated
-    top-level git directory, and creates a tarball.
-    Will throw subprocess.CalledProcessError if there are uncommitted changes.
+    Takes a python module or a path to a file of said module, and attempts to make an installable
+    pypi-style package tarball out of it.
+    If assume_pypi is True, it will look for the pip installation directory of the package, and check
+    whether there is a setup.py.
+    Otherwise, it will look for the top-level git repository and make a tarball from that, including
+    only files that are tracked by git. Uncommitted changes are included, unless allowed_uncommitted 
+    is set to False.
     """
+    outdir = os.getcwd() if outdir is None else outdir
+    outdir = osp.abspath(outdir)
+
     # Input variable may be a path
     if is_string(module):
         # Treat the input variable as a path
@@ -272,43 +279,55 @@ def tarball_python_module(module, outdir=None, allow_uncommitted=True, dry=False
     elif osp.isfile(path):
         path = osp.dirname(path)
 
-    # Get the top-level git dir
-    with switchdir(path):
-        toplevel_git_dir = run_command(['git', 'rev-parse', '--show-toplevel'])[0].strip()
-
-    # Fix the output name of the tarball
-    outdir = os.getcwd() if outdir is None else outdir
-    outfile = osp.join(osp.abspath(outdir), osp.basename(toplevel_git_dir) + '.tar')
-
-    with switchdir(toplevel_git_dir):
-        if allow_uncommitted:
-            logger.info('Creating tarball for %s including uncommitted changes', toplevel_git_dir)
-             # Create the tarball with uncommitted changes in it
-            # if not dry: run_multiple_commands([
-            #     'stashName=`git stash create` ',
-            #     'git archive $stashName -o {0}'.format(outfile)
-            #     ])
-            if not dry:
-                run_command(
-                    'git ls-files -z | xargs -0 tar -cvf {0}'
-                    .format(outfile),
-                    shell=True
-                    )
-        else:
-            # Check if there are uncommitted changes
-            try:
-                run_command(['git', 'diff-index', '--quiet', 'HEAD', '--'])
-            except subprocess.CalledProcessError:
-                logger.error(
-                    'Uncommitted changes detected; it is unlikely you want a tarball '
-                    'with some changes not committed.'
-                    )
-                raise
-            # Create the actual tarball of the latest commit
-            if not dry: run_command(['git', 'archive', '-o', outfile, 'HEAD'])
-
-        logger.info('Created tarball {0}'.format(outfile))
-        return outfile
+    if assume_pypi:
+        # Make sure it has a setup.py
+        setuppy = osp.join(path, 'setup.py')
+        if not osp.isfile(setuppy):
+            raise OSError('Expected file {0} to exist; not a valid pypi package')
+        outfile = osp.join(outdir, osp.basename(path) + '.tar')
+        logger.info('Creating tarball from directory %s --> %s', path, outfile)
+        if not dry:
+            with switchdir(path):
+                run_command([
+                    'tar', '-cvf', outfile, '.',
+                    '--exclude', '*/lib/python*',
+                    '--exclude', '*/include/python*',
+                    '--exclude', '*/bin/python*',
+                    '--exclude', '*.egg-info*',
+                    '--exclude', '*.pyc',
+                    '--exclude', '*/.git'
+                    ])
+    else:
+        logger.info('Package %s: Using top level git to create a tarball', path)
+        # Get the top-level git dir
+        with switchdir(path):
+            toplevel_git_dir = run_command(['git', 'rev-parse', '--show-toplevel'])[0].strip()
+        # Fix the output name of the tarball
+        outfile = osp.join(outdir, osp.basename(toplevel_git_dir) + '.tar')
+        with switchdir(toplevel_git_dir):
+            if allow_uncommitted:
+                logger.info('Creating tarball for %s including uncommitted changes', toplevel_git_dir)
+                # Create the tarball with uncommitted changes in it
+                if not dry:
+                    run_command(
+                        'git ls-files -z | xargs -0 tar -cvf {0}'
+                        .format(outfile),
+                        shell=True
+                        )
+            else:
+                # Check if there are uncommitted changes
+                try:
+                    run_command(['git', 'diff-index', '--quiet', 'HEAD', '--'])
+                except subprocess.CalledProcessError:
+                    logger.error(
+                        'Uncommitted changes detected; it is unlikely you want a tarball '
+                        'with some changes not committed.'
+                        )
+                    raise
+                # Create the actual tarball of the latest commit
+                if not dry: run_command(['git', 'archive', '-o', outfile, 'HEAD'])
+    logger.info('Created tarball {0}'.format(outfile))
+    return outfile
 
 
 def extract_tarball(tarball, outdir='.', dry=False):
