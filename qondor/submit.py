@@ -2,6 +2,7 @@
 import qondor
 import logging, os, os.path as osp, pprint, shutil, uuid, re
 from time import strftime
+import seutils
 logger = logging.getLogger('qondor')
 
 
@@ -216,8 +217,8 @@ class BaseSubmitter(object):
         sub['+QondorRundir']  =  '"' + self.rundir + '"'
         # Overwrite keys from the preprocessing
         sub.update(preprocessor.htcondor)
-        # Flatten files into a string
-        transfer_files = self.transfer_files + list(preprocessor.files.values())
+        # Flatten files into a string, excluding files on storage elements
+        transfer_files = self.transfer_files + [f for f in preprocessor.files.values() if not seutils.has_protocol(f)]
         if len(transfer_files) > 0:
             sub['transfer_input_files'] = ','.join(transfer_files)
         # Simple case with no items; just use the njobs variable        
