@@ -97,8 +97,17 @@ def get_item():
     if BATCHMODE:
         try:
             item = os.environ['QONDORITEM']
-            if ',' in item: item = item.split(',')
-            return item
+            if item.startswith(','):
+                # This is a hack to make sure that if the chunk_size is set to 1,
+                # get_item() still returns a len-1 list, and not a plain string.
+                # Only items meant to be len-1 lists should start with a comma.
+                return [item[1:]]
+            elif ',' in item:
+                # Normal case for a list of items (n_items > 1)
+                return item.split(',')
+            else:
+                # Normal case for a simple string being an item
+                return item
         except KeyError:
             logger.error('No item was found for this job! Are you sure you passed items?')
             raise

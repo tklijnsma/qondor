@@ -377,7 +377,15 @@ def htcondor_submit(sub, njobs=1, submission_dir='.', items=None):
                 for item in items:
                     # Ensure the string will be ',' separated (a len-1 list will not have a comma)
                     # Also ensure there are no quotes in it, which would screw up condor's reading
-                    if qondor.utils.is_string(item): item = [item]
+                    if qondor.utils.is_string(item):
+                        item = [item]
+                    elif len(item) == 1:
+                        # Exceptional case: a len-1 list passed is indistinguishable from just a string
+                        # If chunk_size is set to 1, it is intended that QONDORITEM is a len-1 list,
+                        # but the ','.join() statement makes the item look like a simple string.
+                        # Add an initial comma as a hack to tell qondor that the item is meant to be a
+                        # len-1 list.
+                        item[0] = ',' + item[0]
                     item = ','.join([i.replace('\'','').replace('"','') for i in item])
                     # Change the env variable in the submitobject
                     change_submitobject_env_variable(submit_object, 'QONDORITEM', item)
