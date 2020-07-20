@@ -12,6 +12,7 @@ if 'QONDOR_BATCHMODE' in os.environ:
 
 COLLECTOR_NODES = None
 DEFAULT_MGM = None
+TIMESTAMP_FMT = '%Y%m%d_%H%M%S'
 
 from . import schedd
 from .schedd import get_best_schedd, get_schedd_ads, wait, remove_jobs
@@ -130,3 +131,25 @@ def get_var(variable):
     Shortcut to get a variable defined in the preprocessing
     """
     return get_preproc().variables[variable]
+
+def get_submission_timestamp():
+    """
+    Returns the submission time as a timestamp string with format TIMESTAMP_FMT
+    """
+    if BATCHMODE:
+        return os.environ['CLUSTER_SUBMISSION_TIMESTAMP']
+    else:
+        from datetime import datetime
+        logger.info('Local mode - returning current time')
+        return datetime.now().strftime(TIMESTAMP_FMT)
+
+def get_submission_time():
+    """
+    Returns the submission time as datetime object
+    """
+    from datetime import datetime
+    if BATCHMODE:
+        return datetime.strptime(get_submission_timestamp(), TIMESTAMP_FMT)
+    else:
+        logger.info('Local mode - returning current time')
+        return datetime.now()

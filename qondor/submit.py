@@ -145,7 +145,7 @@ class BaseSubmitter(object):
                 'QONDOR_BATCHMODE' : '1',
                 'CONDOR_CLUSTER_NUMBER' : '$(Cluster)',
                 'CONDOR_PROCESS_ID' : '$(Process)',
-                'CLUSTER_SUBMISSION_TIMESTAMP' : strftime('%Y%m%d_%H%M%S'),
+                'CLUSTER_SUBMISSION_TIMESTAMP' : strftime(qondor.TIMESTAMP_FMT),
                 },
             }
         # Try to set some more things
@@ -226,7 +226,7 @@ class BaseSubmitter(object):
     def make_rundir(self):
         self.rundir = osp.abspath('qondor_{0}_{1}'.format(
             self.python_name,
-            strftime('%Y%m%d_%H%M%S')
+            strftime(qondor.TIMESTAMP_FMT)
             ))
         qondor.utils.create_directory(
             self.rundir,
