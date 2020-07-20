@@ -167,29 +167,18 @@ class BaseSubmitter(object):
             # No user specified, no big deal
             pass
         # Special settings for CMS Connect
-        if os.uname()[1] == 'login.uscms.org':
-            sites = [
-                'T3_BY_NCPHEP', 'T2_IT_Bari', 'T3_US_Baylor', 'T2_CN_Beijing', 'T3_IT_Bologna', 'T2_UK_SGrid_Bristol',
-                'T2_UK_London_Brunel', 'T0_CH_CERN', 'T2_CH_CERN', 'T2_CH_CERN_AI', 'T2_CH_CERN_HLT', 'T2_ES_CIEMAT',
-                'T1_IT_CNAF', 'T3_CN_PKU', 'T2_TH_CUNSTDA', 'T2_US_Caltech', 'T3_US_Colorado', 'T3_US_Cornell', 'T3_RU_FIAN',
-                'T3_US_FIT', 'T1_US_FNAL', 'T3_US_FNALLPC', 'T3_US_Omaha', 'T2_FR_GRIF_IRFU', 'T2_FR_GRIF_LLR', 'T2_BR_UERJ',
-                'T2_FI_HIP', 'T2_AT_Vienna', 'T2_HU_Budapest', 'T2_ES_IFCA', 'T2_RU_IHEP', 'T2_BE_IIHE', 'T3_FR_IPNL', 'T2_RU_INR',
-                'T2_FR_IPHC', 'T2_RU_ITEP', 'T2_GR_Ioannina', 'T3_US_JHU', 'T2_RU_JINR', 'T1_RU_JINR', 'T2_UA_KIPT', 'T1_DE_KIT',
-                'T2_KR_KNU', 'T3_KR_KNU', 'T3_US_Kansas', 'T2_IT_Legnaro', 'T2_BE_UCL', 'T3_RU_MEPhI', 'T2_TR_METU', 'T2_US_MIT',
-                'T2_PT_NCG_Lisbon', 'T2_PK_NCP', 'T3_TW_NCU', 'T3_TW_NTU_HEP', 'T3_US_NotreDame', 'T2_TW_NCHC', 'T2_US_Nebraska',
-                'T3_US_NU', 'T3_US_OSU', 'T3_ES_Oviedo', 'T3_UK_SGrid_Oxford', 'T1_ES_PIC', 'T2_RU_PNPI', 'T3_CH_PSI',
-                'T3_IN_PUHEP', 'T3_IT_Perugia', 'T3_US_Princeton_ICSE', 'T2_US_Purdue', 'T3_UK_London_QMUL', 'T1_UK_RAL',
-                'T3_UK_London_RHUL', 'T2_DE_RWTH', 'T3_US_Rice', 'T2_IT_Rome', 'T3_US_Rutgers', 'T2_UK_SGrid_RALPP', 'T2_RU_SINP',
-                'T2_BR_SPRACE', 'T2_CH_CSCS_HPC', 'T2_PL_Swierk', 'T3_US_MIT', 'T3_US_NERSC', 'T3_US_SDSC', 'T3_CH_CERN_CAF',
-                'T3_US_FIU', 'T3_US_FSU', 'T3_US_OSG', 'T3_US_TAMU', 'T2_IN_TIFR', 'T3_IN_TIFRCloud', 'T3_US_TTU', 'T3_IT_Trieste',
-                'T3_US_UCD', 'T3_US_UCSB', 'T2_US_UCSD', 'T3_UK_ScotGrid_GLA', 'T3_US_UMD', 'T3_US_UMiss', 'T3_CO_Uniandes',
-                'T3_KR_UOS', 'T2_MY_UPM_BIRUNI', 'T3_US_PuertoRico', 'T3_BG_UNI_SOFIA', 'T2_US_Vanderbilt', 'T2_US_Wisconsin',
-                'T3_MX_Cinvestav', 'T3_US_FNALLPC'
-                ]
+        # Maybe just .endwith('.uscms.org') ? Not sure if that would break other sites
+        if os.uname()[1] == 'login.uscms.org' or os.uname()[1] == 'login-el7.uscms.org':
+            logger.warning('Detected CMS Connect; loading specific settings')
+            # Read the central config for cmsconnect
+            import ConfigParser
+            cfg = ConfigParser.RawConfigParser()
+            cfg.read('/etc/ciconnect/config.ini')
+            default_sites = cfg.get('submit', 'DefaultSites')
+            sub['+DESIRED_Sites'] = '"' + default_sites + '"'
             sub['+ConnectWrapper'] = '"2.0"'
             logger.warning('FIXME: CMS Connect settings currently hard-coded for a FNAL user')
             sub['+CMSGroups'] = '"/cms,T3_US_FNALLPC"'
-            sub['+DESIRED_Sites'] = '"' + ','.join(sites) + '"'
             sub['+MaxWallTimeMins'] = '500'
             sub['+ProjectName'] = '"cms.org.fnal"'
             sub['+SubmitFile'] = '"irrelevant.jdl"'
