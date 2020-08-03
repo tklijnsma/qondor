@@ -4,6 +4,8 @@ from .logger import setup_logger, setup_subprocess_logger
 logger = setup_logger()
 subprocess_logger = setup_subprocess_logger()
 
+INCLUDE_DIR = osp.join(osp.abspath(osp.dirname(__file__)), 'include')
+
 from . import utils
 
 BATCHMODE = False
@@ -116,6 +118,49 @@ def get_item():
         items = get_master_preproc().all_items()
         if not items: raise RuntimeError('No items determined in preprocessing')
         return items[get_proc_id()]
+
+def get_chunk():
+    """
+    Gets the chunk of rootfiles with first and last entries to use (summing up
+    to a specified number of entries).
+    Format is [ (rootfile, first, last), (rootfile, first, last) ]
+    """
+    if BATCHMODE:
+        try:
+            chunk_str = os.environ['QONDORROOTFILECHUNK']
+            def read_chunk_str(chunk_str):
+                for part in chunk_str.split(';'):
+                    rootfile, first, last, is_whole_file = part.split(',')
+                    yield rootfile, int(first), int(last), bool(is_whole_file)
+            return list(read_chunk_str(chunk_str))
+        except KeyError:
+            logger.error(
+                'No chunk was found for this job! Are you sure you passed "items e=..."'
+                ', and not "items ..."?'
+                )
+            raise
+    else:
+        logger.info('Local mode - returning first chunk')
+        chunks = get_master_preproc().all_rootfile_chunks()
+        if not chunks: raise RuntimeError('No chunks determined in preprocessing')
+        chunk = chunks[get_proc_id()]
+        logger.info('Chunk: %s', chunk)
+        return chunk
+
+def get_chunk_as_rootfile(dst='chunk.root', cmssw=None):
+    """
+    Instead of returning the chunk as a list, it takes the chunk and
+    makes one single root file out of it by splitting and hadding the
+    parts of the chunk.
+    If `cmssw` is passed, the splitting is performed in the CMSSW
+    environment (which is usually needed for CMSSW root files).
+    """
+    chunk = get_chunk()
+    if cmssw:
+        seutils.root.hadd_chunk_entries(chunk, dst, file_split_fn=cmssw.make_chunk_rootfile)
+    else:
+        seutils.root.hadd_chunk_entries(chunk, dst)
+    return dst
 
 def init_cmssw(tarball_key='cmssw_tarball', scram_arch=None):
     """

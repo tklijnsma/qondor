@@ -112,6 +112,7 @@ class Preprocessor(object):
         self.variables = {}
         self.files = {}
         self.items = []
+        self.rootfile_chunks = []
         self.delayed_runtime = None
         self.allowed_lateness = None
         # File with cached output from ls processing
@@ -162,11 +163,12 @@ class Preprocessor(object):
         self.variables = dict(base.variables, **self.variables)
         self.env = dict(base.env, **self.env)
         self.files = dict(base.files, **self.files)
-        if hasattr(base, 'filename'): self.filename = base.filename
+        if hasattr(base, 'filename') and not hasattr(self, 'filename'): self.filename = base.filename
         if self.delayed_runtime is None: self.delayed_runtime = base.delayed_runtime
         if self.allowed_lateness is None: self.allowed_lateness = base.allowed_lateness
         # Append style:
         self.items = base.items + self.items
+        self.rootfile_chunks = base.rootfile_chunks + self.rootfile_chunks
         self.pip = base.pip + self.pip
 
     def sets(self):
@@ -192,6 +194,15 @@ class Preprocessor(object):
         for s in self.sets():
             all_items.extend(s.items)
         return all_items
+
+    def all_rootfile_chunks(self):
+        """
+        Returns all rootfile_chunks of subsets below.
+        """
+        all_rootfile_chunks = []
+        for s in self.sets():
+            all_rootfile_chunks.extend(s.rootfile_chunks)
+        return all_rootfile_chunks
 
     def get_pip_install_instruction(self, package_name):
         """
@@ -306,17 +317,27 @@ class Preprocessor(object):
         items = []
         n_chunks = None
         chunk_size = None
+        chunk_size_events = None
         for item in unprocessed_items:
             # If an 'item' starts with n= or b=, read that value and don't consider it
             # an item to process. These 'flags' are to configure the chunkification.
             # Only the last parameter counts, any previous parameter will be overwritten.
+            # New flag: e= to make chunks with a specific number entries. Only works for
+            # for root files.
             if item.startswith('n='):
                 n_chunks = int(item.split('=')[-1])
                 chunk_size = None
+                chunk_size_events = None
                 continue
             elif item.startswith('b='):
                 chunk_size = int(item.split('=')[-1])
                 n_chunks = None
+                chunk_size_events = None
+                continue
+            elif item.startswith('e='):
+                chunk_size_events = int(item.split('=')[-1])
+                n_chunks = None
+                chunk_size = None
                 continue
             else:
                 # It's an item; see if it's meant to be expanded:
@@ -335,7 +356,7 @@ class Preprocessor(object):
                 else:
                     items.append(item)
         n_items = len(items)
-        if n_chunks is None and chunk_size is None:
+        if n_chunks is None and chunk_size is None and chunk_size_events is None:
             # There was no chunkification flag;
             # Use the default of 1 item per chunk, and let's not bother putting it in a list
             self.items.extend(items)
@@ -344,7 +365,13 @@ class Preprocessor(object):
             if chunk_size:
                 # If chunk_size is given, calculate the number of chunks that fit in the items
                 n_chunks = int(math.ceil(float(n_items) / chunk_size))
-            self.items.extend(qondor.utils.chunkify(items, n_chunks))
+                self.items.extend(qondor.utils.chunkify(items, n_chunks))
+            elif n_chunks:
+                self.items.extend(qondor.utils.chunkify(items, n_chunks))
+            elif chunk_size_events:
+                self.rootfile_chunks.extend(
+                    list(seutils.root.iter_chunkify_rootfiles_by_entries(items, chunk_size_events))
+                    )
 
     def preprocess_line_htcondor(self, line):
         # Remove 'htcondor' and assume 'key value' structure further on

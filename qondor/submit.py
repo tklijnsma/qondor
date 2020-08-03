@@ -222,17 +222,28 @@ class BaseSubmitter(object):
         transfer_files = self.transfer_files + [f for f in preprocessor.files.values() if not seutils.has_protocol(f)]
         if len(transfer_files) > 0:
             sub['transfer_input_files'] = ','.join(transfer_files)
-        # Simple case with no items; just use the njobs variable        
-        if not preprocessor.items:
+        # Otherwise continue processing items
+        if preprocessor.items and preprocessor.rootfile_chunks:
+            raise ValueError(
+                'Both regular items and rootfiles-split-by-entries are specified; '
+                'This is not supported.'
+                )
+        elif preprocessor.items:
+            logger.info('Items:\n%s', pprint.pformat(preprocessor.items))
+            if not self.dry:
+                return htcondor_submit(sub, 1, submission_dir=self.rundir, items=preprocessor.items)
+        elif preprocessor.rootfile_chunks:
+            logger.info('Items as rootfile chunks:\n%s', pprint.pformat(preprocessor.items))
+            if not self.dry:
+                return htcondor_submit(
+                    sub, 1, submission_dir=self.rundir, rootfile_chunks=preprocessor.rootfile_chunks
+                    )
+        else:
+            # Simple case with no items; just use the njobs variable with a default of 1
             njobs = int(preprocessor.variables.get('njobs', 1))
             logger.info('Submitting %s jobs with:\n%s', njobs, pprint.pformat(sub))
             if not self.dry:
                 return htcondor_submit(sub, njobs, submission_dir=self.rundir)
-        # Otherwise continue processing items
-        logger.info('Items:\n%s', pprint.pformat(preprocessor.items))
-        if not self.dry:
-            subcopy = sub.copy()
-            return htcondor_submit(subcopy, 1, submission_dir=self.rundir, items=preprocessor.items)
 
     def make_rundir(self):
         self.rundir = osp.abspath('qondor_{0}_{1}'.format(
@@ -355,22 +366,29 @@ class CodeSubmitter(BaseSubmitter):
             os.remove(python_file)
 
 
-def htcondor_submit(sub, njobs=1, submission_dir='.', items=None):
+def htcondor_submit(sub, njobs=1, submission_dir='.', items=None, rootfile_chunks=None):
     """
     Submits the submission dict `sub` to the best scheduler.
+    If items are passed, it submits 1 job per item, and makes sure
+    to set the item in the environment of the job in $QONDORITEM.
+    If rootfile_chunks are passed, it submits 1 job per chunk, and
+    makes sure to set the chunk in the environment of the job in
+    $QONDORROOTFILECHUNK.
+    If neither of those are set, it submits `njobs` without setting
+    anything specific per job in the job's environment.
     Returns the cluster id and class ad of the submitted job
     """
     import htcondor
     schedd = qondor.get_best_schedd(renew=True)
-    # Create a copy to keep original dict unmodified
-    # Make the transaction
     with qondor.utils.switchdir(submission_dir):
+        # Create a copy to keep original dict unmodified
+        # Make the transaction
         subcopy = sub.copy()
         with schedd.transaction() as transaction:
+            ads = []
             if items:
                 # Items logic: Turn any potential list into a ','-separated string,
                 # and set the environment variable QONDORITEM to that string.
-                ads = []
                 subcopy['environment']['QONDORITEM'] = 'placeholder' # Placeholder
                 subcopy['environment'] = htcondor_format_environment(subcopy['environment'])
                 submit_object = htcondor.Submit(subcopy)
@@ -394,10 +412,24 @@ def htcondor_submit(sub, njobs=1, submission_dir='.', items=None):
                     cluster_id = submit_object.queue(transaction, njobs, ad)
                     cluster_id = int(cluster_id)
                     ads.extend(ad)
+            elif rootfile_chunks:
+                # Set the chunk as a string in the environment as follows:
+                # rootfile,first,last,is_whole_file;rootfile,first,last,is_whole_file;...
+                format_chunk = lambda chunk: ';'.join(
+                    [','.join([str(i) for i in elements]) for elements in chunk]
+                    )
+                subcopy['environment']['QONDORROOTFILECHUNK'] = 'placeholder'
+                subcopy['environment'] = htcondor_format_environment(subcopy['environment'])
+                submit_object = htcondor.Submit(subcopy)                
+                for chunk in rootfile_chunks:
+                    change_submitobject_env_variable(submit_object, 'QONDORROOTFILECHUNK', format_chunk(chunk))
+                    ad = []
+                    cluster_id = submit_object.queue(transaction, njobs, ad)
+                    cluster_id = int(cluster_id)
+                    ads.extend(ad)
             else:
                 subcopy['environment'] = htcondor_format_environment(subcopy['environment'])
                 submit_object = htcondor.Submit(subcopy)
-                ads = []
                 cluster_id = submit_object.queue(transaction, njobs, ads)
                 cluster_id = int(cluster_id)
     logger.info('Submitted %s jobs to cluster %s', len(ads), cluster_id)

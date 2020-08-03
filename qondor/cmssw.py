@@ -219,3 +219,35 @@ class CMSSW(object):
             cmd.extend(['--exclude={0}'.format(e) for e in exclude])
             cmd.append(osp.basename(cmssw_path))
             qondor.utils.run_command(cmd)
+
+    def pip(self, *args):
+        """
+        Installs a pypi package in this CMSSW environment using the scram-pip script.
+        Any arguments are used for the pip command
+        """
+        scrampip = osp.join(qondor.INCLUDE_DIR, 'scram-pip')
+        cmd = [ scrampip ] + list(args)
+        self.run_commands([
+            cmd, 'cmsenv'
+            ])
+
+    def make_chunk_rootfile(self, src, first, last, tree='auto', dst=None):
+        """
+        Round-about way of calling seutils.make_chunk_rootfile in this CMSSW environment.
+        First installs seutils in this CMSSW using scram pip, then calls seu-takechunkroot
+        to perform the actual splitting.
+        This is a rather hacky solution.
+        """
+        self.pip('seutils', '-p="--ignore-installed"')
+        cmd = 'seu-takechunkroot {src} -f {first} -l {last} -t {tree}'.format(
+            src=src, first=first, last=last, tree=tree
+            )
+        if dst: cmd += ' -d ' + dst
+        self.run_command(cmd)
+
+    def get_chunk(self, chunk, dst, tree='auto'):
+        """
+        Roundabout way of calling seutils.hadd_chunk_entries in this CMSSW environment.
+        """
+        return seutils.hadd_chunk_entries(chunk, dst, tree=tree, file_split_fn=self.make_chunk_rootfile)
+
