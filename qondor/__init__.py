@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import os, os.path as osp
+import os, os.path as osp, uuid
 from .logger import setup_logger, setup_subprocess_logger
 logger = setup_logger()
 subprocess_logger = setup_subprocess_logger()

@@ -222,7 +222,7 @@ class BaseSubmitter(object):
             if not self.dry:
                 return htcondor_submit(sub, 1, submission_dir=self.rundir, items=preprocessor.items)
         elif preprocessor.rootfile_chunks:
-            logger.info('Items as rootfile chunks:\n%s', pprint.pformat(preprocessor.items))
+            logger.info('Items as rootfile chunks:\n%s', pprint.pformat(preprocessor.rootfile_chunks))
             if not self.dry:
                 return htcondor_submit(
                     sub, 1, submission_dir=self.rundir, rootfile_chunks=preprocessor.rootfile_chunks
@@ -253,6 +253,12 @@ class BaseSubmitter(object):
         qondor.Preprocessor.dump_ls_cache(cache_file)
         self.transfer_files.append(cache_file)
 
+    def dump_rootcache(self):
+        if seutils.root.USE_CACHE:
+            rootcache_file = osp.join(self.rundir, 'rootcache.tar.gz')
+            seutils.root.cache_to_file(rootcache_file)
+            self.transfer_files.append(rootcache_file)
+
     def submit(self, python_script_args=None):
         """
         Main submission method
@@ -264,6 +270,7 @@ class BaseSubmitter(object):
             self.make_rundir()
             self.copy_python_file()
             self.dump_ls_cache_file()
+            self.dump_rootcache()
             # Loop over all 'sets'
             # If there are no subsets, this is just a len(1) iterator of the preprocessing
             for i_set, preprocessor in enumerate(self.preprocessing.sets()):
