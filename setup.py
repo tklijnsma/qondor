@@ -15,6 +15,6 @@ setup(
         'bin/qondor-submit',
         'bin/qondor-sleepuntil'
         ],
-    include_package_data = True,
     install_requires     = ['seutils'],
+    include_package_data = True,
     )
