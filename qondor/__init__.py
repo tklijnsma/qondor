@@ -137,7 +137,7 @@ def get_chunk():
             def read_chunk_str(chunk_str):
                 for part in chunk_str.split(';'):
                     rootfile, first, last, is_whole_file = part.split(',')
-                    yield rootfile, int(first), int(last), bool(is_whole_file)
+                    yield rootfile, int(first), int(last), bool(int(is_whole_file)) # Note bool('0') would be True
             return list(read_chunk_str(chunk_str))
         except KeyError:
             logger.error(

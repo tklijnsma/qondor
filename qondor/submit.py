@@ -415,8 +415,10 @@ def htcondor_submit(sub, njobs=1, submission_dir='.', items=None, rootfile_chunk
             elif rootfile_chunks:
                 # Set the chunk as a string in the environment as follows:
                 # rootfile,first,last,is_whole_file;rootfile,first,last,is_whole_file;...
+                # Convert is_whole_file to either 0 or 1 first (converting bool to str
+                # yields 'True' or 'False', but str('False') yields True...)
                 format_chunk = lambda chunk: ';'.join(
-                    [','.join([str(i) for i in elements]) for elements in chunk]
+                    [ str(chunk[0]), str(chunk[1]), str(chunk[2]), str(int(chunk[3])) ]
                     )
                 subcopy['environment']['QONDORROOTFILECHUNK'] = 'placeholder'
                 subcopy['environment'] = htcondor_format_environment(subcopy['environment'])
