@@ -28,6 +28,10 @@ import seutils
 if BATCHMODE and osp.isfile(Preprocessor.LS_CACHE_FILE):
     Preprocessor.read_ls_cache(Preprocessor.LS_CACHE_FILE)
 
+# Read rootcache is this is a job
+if BATCHMODE and osp.isfile('rootcache.tar.gz'):
+    seutils.load_cache('rootcache.tar.gz')
+
 if os.environ.get('HOSTNAME', '').endswith('fnal.gov'):
     # Fix to be able to import htcondor python bindings
     import sys
