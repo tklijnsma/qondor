@@ -318,12 +318,15 @@ class Preprocessor(object):
         n_chunks = None
         chunk_size = None
         chunk_size_events = None
+        max_items = None
         for item in unprocessed_items:
             # If an 'item' starts with n= or b=, read that value and don't consider it
             # an item to process. These 'flags' are to configure the chunkification.
             # Only the last parameter counts, any previous parameter will be overwritten.
             # New flag: e= to make chunks with a specific number entries. Only works for
             # for root files.
+            # New flag: nmax= to limit the number of items to maximally that number. Usefull
+            # mostly for debugging.
             if item.startswith('n='):
                 n_chunks = int(item.split('=')[-1])
                 chunk_size = None
@@ -338,6 +341,9 @@ class Preprocessor(object):
                 chunk_size_events = int(item.split('=')[-1])
                 n_chunks = None
                 chunk_size = None
+                continue
+            elif item.startswith('nmax='):
+                max_items = int(item.split('=')[-1])
                 continue
             else:
                 # It's an item; see if it's meant to be expanded:
@@ -356,22 +362,27 @@ class Preprocessor(object):
                 else:
                     items.append(item)
         n_items = len(items)
+        # Small function to truncate items by nmax if necessary
+        def truncate_items(items):
+            if max_items and len(items) > max_items:
+                logger.info('nmax: Limiting items to %s (from total %s)', max_items, len(items))
+                return items[:max_items]
         if n_chunks is None and chunk_size is None and chunk_size_events is None:
             # There was no chunkification flag;
             # Use the default of 1 item per chunk, and let's not bother putting it in a list
-            self.items.extend(items)
-        # Else use the chunkification parameters; items will be lists
+            self.items.extend(truncate_items(items))
+        elif chunk_size_events:
+            # The n-entry-sized chunks option was used, make chunks by number of entries
+            items = list(seutils.root.iter_chunkify_rootfiles_by_entries(items, chunk_size_events))
+            self.rootfile_chunks.extend(truncate_items(items))
         else:
+            # Either chunk_size or n_chunks was used
             if chunk_size:
                 # If chunk_size is given, calculate the number of chunks that fit in the items
+                # Otherwise n_chunks should be given
                 n_chunks = int(math.ceil(float(n_items) / chunk_size))
-                self.items.extend(qondor.utils.chunkify(items, n_chunks))
-            elif n_chunks:
-                self.items.extend(qondor.utils.chunkify(items, n_chunks))
-            elif chunk_size_events:
-                self.rootfile_chunks.extend(
-                    list(seutils.root.iter_chunkify_rootfiles_by_entries(items, chunk_size_events))
-                    )
+            items = qondor.utils.chunkify(items, n_chunks)
+            self.items.extend(truncate_items(items))
 
     def preprocess_line_htcondor(self, line):
         # Remove 'htcondor' and assume 'key value' structure further on
