@@ -171,8 +171,12 @@ class BaseSubmitter(object):
         if os.uname()[1] == 'login.uscms.org' or os.uname()[1] == 'login-el7.uscms.org':
             logger.warning('Detected CMS Connect; loading specific settings')
             # Read the central config for cmsconnect
-            import ConfigParser
-            cfg = ConfigParser.RawConfigParser()
+            try:
+                from configparser import RawConfigParser # python 3
+            except ImportError:
+                import ConfigParser # python 2
+                RawConfigParser = ConfigParser.RawConfigParser
+            cfg = RawConfigParser()
             cfg.read('/etc/ciconnect/config.ini')
             default_sites = cfg.get('submit', 'DefaultSites')
             sub['+DESIRED_Sites'] = '"' + default_sites + '"'
