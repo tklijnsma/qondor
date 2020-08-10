@@ -129,8 +129,7 @@ class BaseSubmitter(object):
         self.dry = dry
         self._created_python_module_tarballs = []
 
-    @staticmethod
-    def get_default_sub_dict():
+    def get_default_sub_dict(self, preprocessor=None):
         """
         Returns the default submission dict (the equivalent of a .jdl file)
         to be used by the submitter. Implemented like this to be subclassable.
@@ -178,8 +177,35 @@ class BaseSubmitter(object):
                 RawConfigParser = ConfigParser.RawConfigParser
             cfg = RawConfigParser()
             cfg.read('/etc/ciconnect/config.ini')
-            default_sites = cfg.get('submit', 'DefaultSites')
-            sub['+DESIRED_Sites'] = '"' + default_sites + '"'
+            sites = cfg.get('submit', 'DefaultSites').split(',')
+            # Check whether the user whitelisted or blacklisted some sites
+            if preprocessor:
+                import fnmatch
+                blacklisted = []
+                whitelisted = []
+                # Build the blacklist
+                print(preprocessor.variables)
+                if 'sites_blacklist' in preprocessor.variables:
+                    for blacksite in preprocessor.variables['sites_blacklist'].split():
+                        for site in sites:
+                            if fnmatch.fnmatch(site, blacksite):
+                                blacklisted.append(site)
+                # Build the whitelist
+                if 'sites_whitelist' in preprocessor.variables:
+                    for whitesite in preprocessor.variables['sites_whitelist'].split():
+                        for site in sites:
+                            if fnmatch.fnmatch(site, whitesite):
+                                whitelisted.append(site)
+                blacklisted = list(set(blacklisted))
+                blacklisted.sort()
+                whitelisted = list(set(whitelisted))
+                whitelisted.sort()
+                logger.info('Blacklisting: %s', ','.join(blacklisted))
+                logger.info('Whitelisting: %s', ','.join(whitelisted))
+                sites = list( (set(sites) - set(blacklisted)).union(set(whitelisted)) )
+                sites.sort()
+            logger.info('Submitting to sites: %s', ','.join(sites))
+            sub['+DESIRED_Sites'] = '"' + ','.join(sites) + '"'
             sub['+ConnectWrapper'] = '"2.0"'
             logger.warning('FIXME: CMS Connect settings currently hard-coded for a FNAL user')
             sub['+CMSGroups'] = '"/cms,T3_US_FNALLPC"'
@@ -205,7 +231,7 @@ class BaseSubmitter(object):
         self._created_python_module_tarballs.append(module_name)
 
     def submit_to_htcondor(self, shfile, preprocessor):
-        sub = self.__class__.get_default_sub_dict()
+        sub = self.get_default_sub_dict(preprocessor)
         sub['executable'] =  osp.basename(shfile)
         sub['+QondorRundir']  =  '"' + self.rundir + '"'
         sub['environment']['QONDORISET'] = str(preprocessor.subset_index)
