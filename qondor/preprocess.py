@@ -366,7 +366,8 @@ class Preprocessor(object):
         def truncate_items(items):
             if max_items and len(items) > max_items:
                 logger.info('nmax: Limiting items to %s (from total %s)', max_items, len(items))
-                return items[:max_items]
+                items = items[:max_items]
+            return items
         if n_chunks is None and chunk_size is None and chunk_size_events is None:
             # There was no chunkification flag;
             # Use the default of 1 item per chunk, and let's not bother putting it in a list
