@@ -24,6 +24,10 @@ from .cmssw import CMSSW
 from .cmssw_releases import get_arch
 import seutils
 
+if BATCHMODE:
+    # Sets default amount of times to retry a seutils.cp statement
+    seutils.N_COPY_RETRIES = 2
+
 # Read cached ls calls if this is a job
 if BATCHMODE and osp.isfile(Preprocessor.LS_CACHE_FILE):
     Preprocessor.read_ls_cache(Preprocessor.LS_CACHE_FILE)
