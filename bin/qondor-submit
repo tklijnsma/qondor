@@ -4,15 +4,23 @@ import qondor, seutils
 import argparse, sys, uuid
 parser = argparse.ArgumentParser()
 parser.add_argument('pythonfile', type=str, help='Path to a python file to be submitted to htcondor')
-# Save all other arguments in order to use them for the python script in the job
-args, other_args = parser.parse_known_args()
+
+# Parse once to find the index of the pythonfile argument
+all_args, remainder = parser.parse_known_args()
+index_pythonfile = sys.argv.index(all_args.pythonfile)
+sysargs_for_submit = sys.argv[:index_pythonfile]
+sysargs_for_python = sys.argv[index_pythonfile:]
+
+# Parse again with just the arguments before the pythonfile arg
+# This should crash if there are unknown arguments
+args = parser.parse_args(sysargs_for_submit)
 
 def main():
     qondor.utils.check_proxy()
-    python_script_args = sys.argv[2:]
+    # Open a cache for any store element requests
     with seutils.root.cache(cache_dir='.fcache/rootcache-{}'.format(uuid.uuid4())) as cache_dir:
         submitter = qondor.Submitter(args.pythonfile)
-        cluster_id, ads = submitter.submit(python_script_args)
+        cluster_id, ads = submitter.submit(sysargs_for_python)
 
 if __name__ == '__main__':
     main()
