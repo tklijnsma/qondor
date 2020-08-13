@@ -24,6 +24,11 @@ from .cmssw import CMSSW
 from .cmssw_releases import get_arch
 import seutils
 
+
+# ___________________________________________________
+# Decisions at import-time depending on whether this is a job or
+# an import on an interactive node
+
 if BATCHMODE:
     # Sets default amount of times to retry a seutils.cp statement
     seutils.N_COPY_RETRIES = 2
@@ -36,8 +41,10 @@ if BATCHMODE and osp.isfile(Preprocessor.LS_CACHE_FILE):
 if BATCHMODE and osp.isfile('rootcache.tar.gz'):
     seutils.root.load_cache('rootcache.tar.gz')
 
+# FNAL-specific things
 if os.environ.get('HOSTNAME', '').endswith('fnal.gov'):
     # Fix to be able to import htcondor python bindings
+    logger.warning('Detected FNAL: Modifying path to use system htcondor python bindings')
     import sys
     if sys.version_info.major < 3:
         sys.path.extend([
@@ -46,6 +53,15 @@ if os.environ.get('HOSTNAME', '').endswith('fnal.gov'):
             ])
     schedd.GLOBAL_SCHEDDMAN_CLS = schedd.ScheddManagerFermiHTC
     seutils.set_default_mgm('root://cmseos.fnal.gov')
+
+
+# ___________________________________________________
+# 'Globals'
+
+DRYMODE = False
+def drymode(flag=True):
+    global DRYMODE
+    DRYMODE = flag
 
 
 # ___________________________________________________

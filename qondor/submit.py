@@ -2,6 +2,7 @@
 import qondor
 import logging, os, os.path as osp, pprint, shutil, uuid, re
 from time import strftime
+from contextlib import contextmanager
 import seutils
 logger = logging.getLogger('qondor')
 
@@ -12,7 +13,8 @@ class SHFile(object):
         self.preprocessing = preprocessing
         self.python_script_args = python_script_args
 
-    def to_file(self, filename, dry=False):
+    def to_file(self, filename, dry=None):
+        if dry is None: dry = qondor.DRYMODE
         sh = '\n'.join(self.parse())
         logger.info('Parsed the following .sh file:\n%s', sh)
         logger.info('Writing to %s', filename)
@@ -123,10 +125,9 @@ class SHFile(object):
 
 class BaseSubmitter(object):
 
-    def __init__(self, dry=False):
+    def __init__(self):
         super(BaseSubmitter, self).__init__()
         self.transfer_files = []
-        self.dry = dry
         self._created_python_module_tarballs = []
 
     def get_default_sub_dict(self, preprocessor=None):
@@ -225,7 +226,6 @@ class BaseSubmitter(object):
         tarball = qondor.utils.tarball_python_module(
             module,
             outdir = self.rundir,
-            dry = self.dry
             )
         self.transfer_files.append(tarball)
         self._created_python_module_tarballs.append(module_name)
@@ -249,20 +249,17 @@ class BaseSubmitter(object):
                 )
         elif preprocessor.items:
             logger.info('Items:\n%s', pprint.pformat(preprocessor.items))
-            if not self.dry:
-                return htcondor_submit(sub, 1, submission_dir=self.rundir, items=preprocessor.items)
+            return htcondor_submit(sub, 1, submission_dir=self.rundir, items=preprocessor.items)
         elif preprocessor.rootfile_chunks:
             logger.info('Items as rootfile chunks:\n%s', pprint.pformat(preprocessor.rootfile_chunks))
-            if not self.dry:
-                return htcondor_submit(
-                    sub, 1, submission_dir=self.rundir, rootfile_chunks=preprocessor.rootfile_chunks
-                    )
+            return htcondor_submit(
+                sub, 1, submission_dir=self.rundir, rootfile_chunks=preprocessor.rootfile_chunks
+                )
         else:
             # Simple case with no items; just use the njobs variable with a default of 1
             njobs = int(preprocessor.variables.get('njobs', 1))
             logger.info('Submitting %s jobs with:\n%s', njobs, pprint.pformat(sub))
-            if not self.dry:
-                return htcondor_submit(sub, njobs, submission_dir=self.rundir)
+            return htcondor_submit(sub, njobs, submission_dir=self.rundir)
 
     def make_rundir(self):
         self.rundir = osp.abspath('qondor_{0}_{1}'.format(
@@ -272,7 +269,6 @@ class BaseSubmitter(object):
         qondor.utils.create_directory(
             self.rundir,
             must_not_exist=True,
-            dry=self.dry
             )
 
     def dump_ls_cache_file(self):
@@ -286,7 +282,7 @@ class BaseSubmitter(object):
     def dump_rootcache(self):
         if seutils.root.USE_CACHE:
             rootcache_file = osp.join(self.rundir, 'rootcache.tar.gz')
-            seutils.root.cache_to_file(rootcache_file)
+            if not qondor.DRYMODE: seutils.root.cache_to_file(rootcache_file)
             self.transfer_files.append(rootcache_file)
 
     def submit(self, python_script_args=None):
@@ -310,7 +306,7 @@ class BaseSubmitter(object):
                         self.tar_python_module(package)
                 # Create the bash script entry point for this job
                 shfile = osp.join(self.rundir, '{0}_{1}.sh'.format(self.python_name, i_set))
-                SHFile(preprocessor, python_script_args).to_file(shfile, dry=self.dry)
+                SHFile(preprocessor, python_script_args).to_file(shfile)
                 # Submit jobs to htcondor
                 cluster_id, ads = self.submit_to_htcondor(shfile, preprocessor)
                 all_cluster_ids.append(cluster_id)
@@ -341,7 +337,7 @@ class Submitter(BaseSubmitter):
 
     def copy_python_file(self):
         self.python_file = osp.join(self.rundir, self.python_base)
-        qondor.utils.copy_file(self.original_python_file, self.python_file, dry=self.dry)
+        qondor.utils.copy_file(self.original_python_file, self.python_file)
         self.transfer_files.append(self.python_file)
 
 
@@ -391,6 +387,13 @@ class CodeSubmitter(BaseSubmitter):
             logger.info('Removing %s', python_file)
             os.remove(python_file)
 
+@contextmanager
+def fake_transaction():
+    try:
+        yield None
+    finally:
+        pass
+
 
 def htcondor_submit(sub, njobs=1, submission_dir='.', items=None, rootfile_chunks=None):
     """
@@ -404,13 +407,14 @@ def htcondor_submit(sub, njobs=1, submission_dir='.', items=None, rootfile_chunk
     anything specific per job in the job's environment.
     Returns the cluster id and class ad of the submitted job
     """
+    dry = qondor.DRYMODE
     import htcondor
     schedd = qondor.get_best_schedd(renew=True)
     with qondor.utils.switchdir(submission_dir):
         # Create a copy to keep original dict unmodified
         # Make the transaction
         subcopy = sub.copy()
-        with schedd.transaction() as transaction:
+        with (fake_transaction() if dry else schedd.transaction()) as transaction:
             ads = []
             if items:
                 # Items logic: Turn any potential list into a ','-separated string,
@@ -435,7 +439,7 @@ def htcondor_submit(sub, njobs=1, submission_dir='.', items=None, rootfile_chunk
                     change_submitobject_env_variable(submit_object, 'QONDORITEM', item)
                     # Submit again and record cluster_id and job ads
                     ad = []
-                    cluster_id = submit_object.queue(transaction, njobs, ad)
+                    cluster_id = 0 if dry else submit_object.queue(transaction, njobs, ad)
                     cluster_id = int(cluster_id)
                     ads.extend(ad)
             elif rootfile_chunks:

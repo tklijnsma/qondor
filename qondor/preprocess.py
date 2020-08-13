@@ -85,8 +85,9 @@ class Preprocessor(object):
         Dumps the LS_CACHE class dict to a file
         """
         logger.info('Dumping ls cache (%s arguments) to %s', len(cls.LS_CACHE.keys()), cache_file)
-        with open(cache_file, 'w') as f:
-            json.dump(cls.LS_CACHE, f)
+        if not qondor.DRYMODE:
+            with open(cache_file, 'w') as f:
+                json.dump(cls.LS_CACHE, f)
 
     # Counter for the number of subsets that have been created
     ISET = 0

@@ -4,6 +4,7 @@ import qondor, seutils
 import argparse, sys, uuid
 parser = argparse.ArgumentParser()
 parser.add_argument('pythonfile', type=str, help='Path to a python file to be submitted to htcondor')
+parser.add_argument('-d', '--dry', action='store_true', help='Prints what would happen does not actually submit a job')
 
 # Parse once to find the index of the pythonfile argument
 all_args, remainder = parser.parse_known_args()
@@ -16,6 +17,8 @@ sysargs_for_python = sys.argv[index_pythonfile:]
 args = parser.parse_args(sysargs_for_submit)
 
 def main():
+    if args.dry: qondor.drymode()
+
     qondor.utils.check_proxy()
     # Open a cache for any store element requests
     with seutils.root.cache(cache_dir='.fcache/rootcache-{}'.format(uuid.uuid4())) as cache_dir:

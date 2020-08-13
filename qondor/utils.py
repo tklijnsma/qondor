@@ -23,7 +23,7 @@ if "check_output" not in dir( subprocess ): # duck punch it in!
         return output
     subprocess.check_output = f
 
-def _create_directory_no_checks(dirname, dry=False):
+def _create_directory_no_checks(dirname, dry=None):
     """
     Creates a directory without doing any further checks.
 
@@ -32,10 +32,11 @@ def _create_directory_no_checks(dirname, dry=False):
     :param dry: Don't actually create the directory, only log
     :type dry: bool, optional
     """
+    if dry is None: dry = qondor.DRYMODE
     logger.warning('Creating directory %s', dirname)
     if not dry: os.makedirs(dirname)
 
-def create_directory(dirname, renew=False, must_not_exist=False, dry=False):
+def create_directory(dirname, renew=False, must_not_exist=False, dry=None):
     """
     Creates a directory if certain conditions are met.
 
@@ -48,6 +49,7 @@ def create_directory(dirname, renew=False, must_not_exist=False, dry=False):
     :param dry: Don't actually create the directory, only log
     :type dry: bool, optional
     """
+    if dry is None: dry = qondor.DRYMODE
     if osp.isfile(dirname):
         raise OSError('{0} is a file'.format(dirname))
     isdir = osp.isdir(dirname)
@@ -63,7 +65,8 @@ def create_directory(dirname, renew=False, must_not_exist=False, dry=False):
             return
     _create_directory_no_checks(dirname, dry=dry)
 
-def copy_file(src, dst, dry=False):
+def copy_file(src, dst, dry=None):
+    if dry is None: dry = qondor.DRYMODE
     logger.info('Copying %s --> %s', src, dst)
     if not dry: shutil.copy(src, dst)
 
@@ -76,12 +79,12 @@ class switchdir(object):
     :param dry: Don't actually change directory if set to True
     :type dry: bool, optional
     """
-    def __init__(self, newdir, dry=False):
+    def __init__(self, newdir, dry=None):
         super(switchdir, self).__init__()
         self.newdir = newdir
         self._backdir = os.getcwd()
         self._no_need_to_change = (self.newdir == self._backdir)
-        self.dry = dry
+        self.dry = qondor.DRYMODE if dry is None else dry
 
     def __enter__(self):
         if self._no_need_to_change:
@@ -96,8 +99,9 @@ class switchdir(object):
         logger.info('chdir back to {0}'.format(self._backdir))
         if not self.dry: os.chdir(self._backdir)
 
-def run_command(cmd, env=None, dry=False, shell=False):
+def run_command(cmd, env=None, dry=None, shell=False):
     logger.warning('Issuing command: {0}'.format(' '.join(cmd) if not is_string(cmd) else cmd))
+    if dry is None: dry = qondor.DRYMODE
     if dry: return
 
     if shell and not is_string(cmd):
@@ -127,9 +131,9 @@ def run_command(cmd, env=None, dry=False, shell=False):
         raise subprocess.CalledProcessError(cmd, returncode)
     return output
 
-
-def run_multiple_commands(cmds, env=None, dry=False):
+def run_multiple_commands(cmds, env=None, dry=None):
     logger.info('Sending cmds:\n{0}'.format(pprint.pformat(cmds)))
+    if dry is None: dry = qondor.DRYMODE
     if dry:
         logger.info('Dry mode - not running command')
         return
@@ -252,7 +256,7 @@ def get_installation_path_of_module(module):
     return path
 
 
-def tarball_python_module(module, outdir=None, allow_uncommitted=True, dry=False, assume_pypi=True):
+def tarball_python_module(module, outdir=None, allow_uncommitted=True, dry=None, assume_pypi=True):
     """
     Takes a python module or a path to a file of said module, and attempts to make an installable
     pypi-style package tarball out of it.
@@ -262,6 +266,7 @@ def tarball_python_module(module, outdir=None, allow_uncommitted=True, dry=False
     only files that are tracked by git. Uncommitted changes are included, unless allowed_uncommitted 
     is set to False.
     """
+    if dry is None: dry = qondor.DRYMODE
     outdir = os.getcwd() if outdir is None else outdir
     outdir = osp.abspath(outdir)
 
@@ -330,10 +335,11 @@ def tarball_python_module(module, outdir=None, allow_uncommitted=True, dry=False
     return outfile
 
 
-def extract_tarball(tarball, outdir='.', dry=False):
+def extract_tarball(tarball, outdir='.', dry=None):
     """
     Extracts a tarball to outdir
     """
+    if dry is None: dry = qondor.DRYMODE
     tarball = osp.abspath(tarball)
     outdir = osp.abspath(outdir)
     logger.warning(
@@ -347,10 +353,11 @@ def extract_tarball(tarball, outdir='.', dry=False):
     run_command(cmd, dry=dry)
 
 
-def extract_tarball_cmssw(tarball, outdir='.', dry=False):
+def extract_tarball_cmssw(tarball, outdir='.', dry=None):
     """
     Extracts a tarball to outdir, and returns the extracted CMSSW dir
     """
+    if dry is None: dry = qondor.DRYMODE
     extract_tarball(tarball, outdir, dry)
     # return the CMSSW directory
     if dry: return 'CMSSW_dry'
