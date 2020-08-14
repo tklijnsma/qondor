@@ -201,11 +201,11 @@ class DummyFile(object):
         logger.debug('Writing: %s', text.replace('\n','\\n'))
 
 @contextmanager
-def openfile(*args, dry=None, **kwargs):
+def openfile(*args, **kwargs):
     """
     Wrapper around the standard open(...) context, with the option of drymode
     """
-    if dry is None: dry = qondor.DRYMODE
+    dry = kwargs.pop('dry', qondor.DRYMODE)
     try:
         if dry:
             yield DummyFile()

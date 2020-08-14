@@ -372,6 +372,7 @@ def submit_pythonbindings(
     # List to store all submitted job ads
     job_ads = []
     cluster_id = 0
+    n_queued = [0] # Make it a 1-element list so that it's a 'pointer'
     with qondor.utils.switchdir(submissiondir):
         # Make the transaction
         with _transaction(schedd) as transaction:
@@ -379,13 +380,14 @@ def submit_pythonbindings(
             # Modifies the 'global' job_ads and cluster_id variables
             def queue(submit_object, njobs=1):
                 ads = []
+                n_queued[0] += njobs
                 if dry: return
                 cluster_id = int(submit_object.queue(transaction, njobs, ads))
                 job_ads.extend(ads)
             # Helper function to test whether the needed amount of jobs to submit
             # is already reached
             def should_quit_now():
-                if not(njobsmax is None) and len(job_ads) >= njobsmax:
+                if not(njobsmax is None) and n_queued[0] >= njobsmax:
                     return True
                 return False
             # Choose specific submit behavior based on what extra keywords were passed
@@ -413,7 +415,7 @@ def submit_pythonbindings(
                 sub['environment'] = _htcondor_format_environment(sub['environment'])
                 submit_object = htcondor.Submit(sub)
                 queue(submit_object, njobs if (njobsmax is None) else min(njobs, njobsmax))
-    logger.info('Submitted %s jobs to cluster %s', len(job_ads), cluster_id)
+    logger.info('Submitted %s jobs to cluster %s', n_queued[0], cluster_id)
     return cluster_id, job_ads            
 
 def submit_condor_submit_commandline(
