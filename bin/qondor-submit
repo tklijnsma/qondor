@@ -39,9 +39,9 @@ def main():
             # Convert to int if necessary - only submitting via python bindngs
             # in non-dry mode will return a list of classads rather than an integer
             try:
-                n_submitted = len(n_submitted)
+                n_submitted = int(n_submitted)
             except TypeError:
-                pass
+                n_submitted = len(n_submitted)
             total_n_submitted += n_submitted
             njobs_left_to_submit -= n_submitted
             if args.njobsmax and njobs_left_to_submit <= 0:

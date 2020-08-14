@@ -479,7 +479,7 @@ def submit_condor_submit_commandline(
             return 0, n_queued
         match = re.search(r'(\d+) job\(s\) submitted to cluster (\d+)', '\n'.join(output))
         if match:
-            n_submitted = match.group(1)
+            n_submitted = int(match.group(1))
             cluster_id = match.group(2)
             logger.info('Submitted %s jobs to cluster_id %s', n_submitted, cluster_id)
             return cluster_id, n_submitted
