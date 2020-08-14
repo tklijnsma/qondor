@@ -256,7 +256,8 @@ class BaseSubmitter(object):
                 shfile = osp.join(self.rundir, '{}_{}.sh'.format(self.python_name, i_set))
                 SHFile(preprocessor, self.python_script_args).to_file(shfile)
                 # Submit jobs to htcondor
-                yield *self.format_for_htcondor_interface(shfile, preprocessor), preprocessor
+                sub, extra_settings = self.format_for_htcondor_interface(shfile, preprocessor)
+                yield sub, extra_settings, preprocessor
                 at_least_one_job_submitted = True
         except StopIteration:
             pass
