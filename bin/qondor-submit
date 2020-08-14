@@ -35,7 +35,7 @@ def main():
             if os.uname()[1] == 'login.uscms.org' or os.uname()[1] == 'login-el7.uscms.org':
                 qondor.logger.warning('Detected CMS Connect; loading specific settings')
                 qondor.submit.cmsconnect_settings(sub, preprocessor=preprocessor, cli=args.cli)
-            cluster_id, n_submitted = submit(sub, **extra_options)
+            cluster_id, n_submitted = submit(sub, submissiondir=submitter.rundir, **extra_options)
             # Convert to int if necessary - only submitting via python bindngs
             # in non-dry mode will return a list of classads rather than an integer
             try:
