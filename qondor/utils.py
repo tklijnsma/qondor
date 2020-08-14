@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import os, shutil, logging, subprocess, glob, pprint, time, datetime, sys
 import os.path as osp
+from contextlib import contextmanager
 import qondor
 logger = logging.getLogger('qondor')
 subprocess_logger = logging.getLogger('subprocess')
@@ -194,6 +195,25 @@ def run_multiple_commands(cmds, env=None, dry=None):
     else:
         raise subprocess.CalledProcessError(cmd, returncode)
 
+
+class DummyFile(object):
+    def write(self, text):
+        logger.debug('Writing: %s', text.replace('\n','\\n'))
+
+@contextmanager
+def openfile(*args, dry=None, **kwargs):
+    """
+    Wrapper around the standard open(...) context, with the option of drymode
+    """
+    if dry is None: dry = qondor.DRYMODE
+    try:
+        if dry:
+            yield DummyFile()
+        else:
+            with open(*args, **kwargs) as f:
+                yield f
+    finally:
+        pass
 
 def get_exitcode(cmd):
     if is_string(cmd): cmd = [cmd]

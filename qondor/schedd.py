@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import qondor
-import logging, re, pprint
-from time import sleep
+import logging, re, pprint, os, os.path as osp
+from time import sleep, strftime
+from contextlib import contextmanager
 logger = logging.getLogger('qondor')
 
 
@@ -247,3 +248,241 @@ def wait(cluster_id, proc_id=None, n_sleep=10):
                 )
             logger.info('Sleeping for %s seconds before checking again', n_sleep)
             sleep(n_sleep)
+
+# _____________________________________________________________________
+# Submission utils
+
+def get_default_sub():
+    """
+    Returns the default submission dict (the equivalent of a .jdl file)
+    to be used by the submitter. Implemented like this to be subclassable.
+    """
+    sub = {
+        'universe' : 'vanilla',
+        'output' : 'out_$(Cluster)_$(Process).txt',
+        'error' : 'err_$(Cluster)_$(Process).txt',
+        'log' : 'log_$(Cluster)_$(Process).txt',
+        'should_transfer_files' : 'YES',
+        'environment' : {
+            'QONDOR_BATCHMODE' : '1',
+            'CONDOR_CLUSTER_NUMBER' : '$(Cluster)',
+            'CONDOR_PROCESS_ID' : '$(Process)',
+            'CLUSTER_SUBMISSION_TIMESTAMP' : strftime(qondor.TIMESTAMP_FMT),
+            },
+        }
+    # Try to set some more things
+    try:
+        sub['x509userproxy'] = os.environ['X509_USER_PROXY']
+    except KeyError:
+        try:
+            sub['x509userproxy'] = qondor.utils.run_command(['voms-proxy-info', '-path'])[0].strip()
+            logger.info('Set x509userproxy to "%s" based on output from voms-proxy-info', sub['x509userproxy'])
+        except:
+            logger.warning(
+                'Could not find a x509userproxy to pass; manually '
+                'set the htcondor variable \'x509userproxy\' if your '
+                'htcondor setup requires it.'
+                )
+    try:
+        sub['environment']['USER'] = os.environ['USER']
+    except KeyError:
+        # No user specified, no big deal
+        pass
+    return sub
+
+def _change_submitobject_env_variable(submitobject, key, value):
+    """
+    Tries to replace an environment variable in a Submit-object.
+    This hack is needed to have items be in the same cluster.
+    """
+    env = submitobject['environment']
+    new_env = re.sub(key + r'=\'.*?\'', '{0}=\'{1}\''.format(key, value), env)
+    logger.debug('Replacing:\n  %s\n  by\n  %s', env, new_env)
+    submitobject['environment'] = new_env
+
+def _htcondor_format_environment(env):
+    """
+    Takes a dict of key : value pairs that are both strings, and
+    returns a string that is formatted so that htcondor can turn it
+    into environment variables
+    """
+    return ('"' +
+        ' '.join(
+            [ '{0}=\'{1}\''.format(key, value) for key, value in env.items() ]
+            )
+        + '"'
+        )
+
+@contextmanager
+def _transaction(schedd, dry=None):
+    """
+    Wrapper for schedd.transaction, + the ability for dry mode
+    """
+    if dry is None: dry = qondor.DRYMODE
+    try:
+        if not dry:
+            with schedd.transaction() as transaction:
+                yield transaction
+        else:
+            yield None
+    finally:
+        pass
+
+def _format_item(item):
+    """
+    Format an item (most likely a list) to a flat string (which will read by the job)
+    """
+    # Ensure the string will be ',' separated (a len-1 list will not have a comma)
+    # Also ensure there are no quotes in it, which would screw up condor's reading
+    if qondor.utils.is_string(item):
+        item = [item]
+    elif len(item) == 1:
+        # Exceptional case: a len-1 list passed is indistinguishable from just a string
+        # If chunk_size is set to 1, it is intended that QONDORITEM is a len-1 list,
+        # but the ','.join() statement makes the item look like a simple string.
+        # Add an initial comma as a hack to tell qondor that the item is meant to be a
+        # len-1 list.
+        item[0] = ',' + item[0]
+    item = ','.join([i.replace('\'','').replace('"','') for i in item])
+    return item
+
+def _format_chunk(chunk):
+    """
+    Format a rootfile chunk (most likely a list) to a flat string (which will read by the job)
+    """
+    # Set the chunk as a string in the environment as follows:
+    # rootfile,first,last,is_whole_file;rootfile,first,last,is_whole_file;...
+    # Convert is_whole_file to either 0 or 1 first (converting bool to str
+    # yields 'True' or 'False', but str('False') yields True...)
+    return ';'.join(
+        [','.join([ str(e[0]), str(e[1]), str(e[2]), str(int(e[3])) ]) for e in chunk]
+        )
+
+def submit_pythonbindings(
+    submissiondict, submissiondir='.', schedd=None, dry=None,
+    items=None, rootfile_chunks=None, njobs=1, njobsmax=None
+    ):
+    """
+    Main interface to htcondor via the python bindings.
+    """
+    if dry is None: dry = qondor.DRYMODE # Inherit global drymode flag
+    import htcondor
+    if schedd is None: schedd = get_best_schedd(renew=True)
+    sub = submissiondict.copy() # Create a copy to keep original dict unmodified
+    # List to store all submitted job ads
+    job_ads = []
+    cluster_id = 0
+    with qondor.utils.switchdir(submissiondir):
+        # Make the transaction
+        with _transaction(schedd) as transaction:
+            # Helper function to actually submit a job to this transaction
+            # Modifies the 'global' job_ads and cluster_id variables
+            def queue(submit_object, njobs=1):
+                ads = []
+                if dry: return
+                cluster_id = int(submit_object.queue(transaction, njobs, ads))
+                job_ads.extend(ads)
+            # Helper function to test whether the needed amount of jobs to submit
+            # is already reached
+            def should_quit_now():
+                if not(njobsmax is None) and len(job_ads) >= njobsmax:
+                    return True
+                return False
+            # Choose specific submit behavior based on what extra keywords were passed
+            if items:
+                # Items logic: Turn any potential list into a ','-separated string,
+                # and set the environment variable QONDORITEM to that string.
+                sub['environment']['QONDORITEM'] = 'placeholder' # Placeholder
+                sub['environment'] = _htcondor_format_environment(sub['environment'])
+                submit_object = htcondor.Submit(sub)
+                for item in items:
+                    # Change the env variable in the submitobject
+                    _change_submitobject_env_variable(submit_object, 'QONDORITEM', _format_item(item))
+                    # Submit again and record cluster_id and job ads
+                    queue(submit_object)
+                    if should_quit_now(): break
+            elif rootfile_chunks:
+                sub['environment']['QONDORROOTFILECHUNK'] = 'placeholder'
+                sub['environment'] = _htcondor_format_environment(sub['environment'])
+                submit_object = htcondor.Submit(sub)                
+                for chunk in rootfile_chunks:
+                    _change_submitobject_env_variable(submit_object, 'QONDORROOTFILECHUNK', _format_chunk(chunk))
+                    queue(submit_object)
+                    if should_quit_now(): break
+            else:
+                sub['environment'] = _htcondor_format_environment(sub['environment'])
+                submit_object = htcondor.Submit(sub)
+                queue(submit_object, njobs if (njobsmax is None) else min(njobs, njobsmax))
+    logger.info('Submitted %s jobs to cluster %s', len(job_ads), cluster_id)
+    return cluster_id, job_ads            
+
+def submit_condor_submit_commandline(
+    submissiondict, submissiondir='.', dry=None,
+    items=None, rootfile_chunks=None, njobs=1, njobsmax=None,
+    do_not_submit=False
+    ):
+    """
+    Main interface to htcondor via the condor_submit command line tool.
+    """
+    if dry is None: dry = qondor.DRYMODE # Inherit global drymode flag
+    sub = submissiondict.copy() # Create a copy to keep original dict unmodified
+    # List to store all submitted job ads
+    job_ads = []
+    cluster_id = 0
+    n_queued = 0
+    # Helper function to test whether we should stop submitting now
+    def should_quit_now():
+        return not(njobsmax is None) and n_queued >= njobsmax
+    with qondor.utils.switchdir(submissiondir):
+        # Write the .jdl file
+        jdl_file = osp.splitext(submissiondict['executable'])[0] + '.jdl'
+        logger.debug('Writing submission to %s', jdl_file)
+        with qondor.utils.openfile(jdl_file, 'w') as jdl:
+            # Write (most) keys in the submission dict to a file
+            for key in submissiondict.keys():
+                if key.lower() == 'environment': continue
+                val = submissiondict[key]
+                jdl.write('{} = {}\n'.format(key, val))
+            # Choose specific submit behavior based on what extra keywords were passed
+            if items:
+                # Items logic: Turn any potential list into a ','-separated string,
+                # and set the environment variable QONDORITEM to that string.
+                for item in items:
+                    sub['environment']['QONDORITEM'] = _format_item(item)
+                    jdl.write('\nenvironment = {}\n'.format(_htcondor_format_environment(sub['environment'])))
+                    jdl.write('queue\n')
+                    n_queued += 1
+                    if should_quit_now(): break
+            elif rootfile_chunks:
+                for chunk in rootfile_chunks:
+                    sub['environment']['QONDORROOTFILECHUNK'] = _format_chunk(chunk)
+                    jdl.write('\nenvironment = {}\n'.format(_htcondor_format_environment(sub['environment'])))
+                    jdl.write('queue\n')
+                    n_queued += 1
+                    if should_quit_now(): break
+            else:
+                if not(njobsmax is None): njobs = min(njobsmax, njobs)
+                jdl.write('environment = {}\n'.format(_htcondor_format_environment(sub['environment'])))
+                jdl.write('queue {}\n'.format(njobs))
+                n_queued += njobs
+        logger.debug('Queued %s jobs', n_queued)
+        # Quit now if we don't actually want to submit
+        if do_not_submit:
+            logger.debug('do_not_submit == True, quiting now')
+            return 0, 0
+        # Run condor_submit on the jdl file (still in the submission directory)
+        output = qondor.utils.run_command(['condor_submit', jdl_file], env=qondor.utils.get_clean_env())
+        if dry:
+            logger.info('Submitted %s jobs to cluster_id 0', n_queued)
+            return 0, 0
+        match = re.search(r'(\d+) job\(s\) submitted to cluster (\d+)', '\n'.join(output))
+        if match:
+            n_submitted = match.group(1)
+            cluster_id = match.group(2)
+            logger.info('Submitted %s jobs to cluster_id %s', n_submitted, cluster_id)
+            return n_submitted, cluster_id
+        else:
+            logger.error(
+                'condor_submit exited ok but could not determine where and how many jobs were submitted'
+                )
+            return 0, 0

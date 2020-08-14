@@ -8,7 +8,9 @@ logger = logging.getLogger('qondor')
 
 
 class SHFile(object):
-    """docstring"""
+    """
+    Writes a .sh file based on a preprocessing object.
+    """
     def __init__(self, preprocessing, python_script_args=None):
         self.preprocessing = preprocessing
         self.python_script_args = python_script_args
@@ -124,118 +126,40 @@ class SHFile(object):
 
 
 class BaseSubmitter(object):
+    """
+    Base class for Submitter: Translates user input to one of the following:
+    - a submission dict + the number of jobs to submit
+    - a submission dict + a list of items
+    - a submission dict + a list of chunks
+    , and creates a directory with the needed input files for the job
+    """
 
-    def __init__(self):
+    def __init__(self, python_script_args=None):
         super(BaseSubmitter, self).__init__()
         self.transfer_files = []
+        self.python_script_args = python_script_args
         self._created_python_module_tarballs = []
 
-    def get_default_sub_dict(self, preprocessor=None):
-        """
-        Returns the default submission dict (the equivalent of a .jdl file)
-        to be used by the submitter. Implemented like this to be subclassable.
-        """
-        sub = {
-            'universe' : 'vanilla',
-            'output' : 'out_$(Cluster)_$(Process).txt',
-            'error' : 'err_$(Cluster)_$(Process).txt',
-            'log' : 'log_$(Cluster)_$(Process).txt',
-            'should_transfer_files' : 'YES',
-            'environment' : {
-                'QONDOR_BATCHMODE' : '1',
-                'CONDOR_CLUSTER_NUMBER' : '$(Cluster)',
-                'CONDOR_PROCESS_ID' : '$(Process)',
-                'CLUSTER_SUBMISSION_TIMESTAMP' : strftime(qondor.TIMESTAMP_FMT),
-                },
-            }
-        # Try to set some more things
-        try:
-            sub['x509userproxy'] = os.environ['X509_USER_PROXY']
-        except KeyError:
-            try:
-                sub['x509userproxy'] = qondor.utils.run_command(['voms-proxy-info', '-path'])[0].strip()
-                logger.info('Set x509userproxy to "%s" based on output from voms-proxy-info', sub['x509userproxy'])
-            except:
-                logger.warning(
-                    'Could not find a x509userproxy to pass; manually '
-                    'set the htcondor variable \'x509userproxy\' if your '
-                    'htcondor setup requires it.'
-                    )
-        try:
-            sub['environment']['USER'] = os.environ['USER']
-        except KeyError:
-            # No user specified, no big deal
-            pass
-        # Special settings for CMS Connect
-        # Maybe just .endwith('.uscms.org') ? Not sure if that would break other sites
-        if os.uname()[1] == 'login.uscms.org' or os.uname()[1] == 'login-el7.uscms.org':
-            logger.warning('Detected CMS Connect; loading specific settings')
-            # Read the central config for cmsconnect
-            try:
-                from configparser import RawConfigParser # python 3
-            except ImportError:
-                import ConfigParser # python 2
-                RawConfigParser = ConfigParser.RawConfigParser
-            cfg = RawConfigParser()
-            cfg.read('/etc/ciconnect/config.ini')
-            sites = cfg.get('submit', 'DefaultSites').split(',')
-            # Check whether the user whitelisted or blacklisted some sites
-            if preprocessor:
-                import fnmatch
-                blacklisted = []
-                whitelisted = []
-                # Build the blacklist
-                print(preprocessor.variables)
-                if 'sites_blacklist' in preprocessor.variables:
-                    for blacksite in preprocessor.variables['sites_blacklist'].split():
-                        for site in sites:
-                            if fnmatch.fnmatch(site, blacksite):
-                                blacklisted.append(site)
-                # Build the whitelist
-                if 'sites_whitelist' in preprocessor.variables:
-                    for whitesite in preprocessor.variables['sites_whitelist'].split():
-                        for site in sites:
-                            if fnmatch.fnmatch(site, whitesite):
-                                whitelisted.append(site)
-                blacklisted = list(set(blacklisted))
-                blacklisted.sort()
-                whitelisted = list(set(whitelisted))
-                whitelisted.sort()
-                logger.info('Blacklisting: %s', ','.join(blacklisted))
-                logger.info('Whitelisting: %s', ','.join(whitelisted))
-                sites = list( (set(sites) - set(blacklisted)).union(set(whitelisted)) )
-                sites.sort()
-            logger.info('Submitting to sites: %s', ','.join(sites))
-            sub['+DESIRED_Sites'] = '"' + ','.join(sites) + '"'
-            sub['+ConnectWrapper'] = '"2.0"'
-            logger.warning('FIXME: CMS Connect settings currently hard-coded for a FNAL user')
-            sub['+CMSGroups'] = '"/cms,T3_US_FNALLPC"'
-            sub['+MaxWallTimeMins'] = '500'
-            sub['+ProjectName'] = '"cms.org.fnal"'
-            sub['+SubmitFile'] = '"irrelevant.jdl"'
-            sub['+AccountingGroup'] = '"analysis.{0}"'.format(os.environ['USER'])
-        return sub
+    # _________________________________________________________
+    # Methods to prep submission dict
 
-    def tar_python_module(self, module_name):
-        if module_name in self._created_python_module_tarballs:
-            logger.debug('Not tarring up %s again, tarball already created', module_name)
-            return
-        logger.info('Creating tarball for python module %s', module_name)
-        import importlib
-        module = importlib.import_module(module_name)
-        tarball = qondor.utils.tarball_python_module(
-            module,
-            outdir = self.rundir,
-            )
-        self.transfer_files.append(tarball)
-        self._created_python_module_tarballs.append(module_name)
-
-    def submit_to_htcondor(self, shfile, preprocessor):
-        sub = self.get_default_sub_dict(preprocessor)
+    def format_for_htcondor_interface(self, shfile, preprocessor):
+        """
+        Formats a submission dict and possibly an extra argument (njobs/items/chunks).
+        Returns a tuple (submissiondict, extra_settings), where the extra_settings is
+        a dictionary with the following possible keys:
+        - 'items' in case there were items found in the preprocessing
+        - 'rootfile_chunks' in case there were rootfile_chunks found in the preprocessing
+        - 'njobs' in case the njobs variable was set in the preprocessing
+        - 'njobsmax'?
+        """
+        extra_submission_settings = {}
+        sub = qondor.schedd.get_default_sub()
+        self.cmsconnect_settings(sub, preprocessor)
         sub['executable'] =  osp.basename(shfile)
         sub['+QondorRundir']  =  '"' + self.rundir + '"'
         sub['environment']['QONDORISET'] = str(preprocessor.subset_index)
-        # Overwrite keys from the preprocessing
+        # Overwrite htcondor keys defined in the preprocessing
         sub.update(preprocessor.htcondor)
         # Flatten files into a string, excluding files on storage elements
         transfer_files = self.transfer_files + [f for f in preprocessor.files.values() if not seutils.has_protocol(f)]
@@ -249,19 +173,95 @@ class BaseSubmitter(object):
                 )
         elif preprocessor.items:
             logger.info('Items:\n%s', pprint.pformat(preprocessor.items))
-            return htcondor_submit(sub, 1, submission_dir=self.rundir, items=preprocessor.items)
+            extra_submission_settings['items'] = preprocessor.items
         elif preprocessor.rootfile_chunks:
             logger.info('Items as rootfile chunks:\n%s', pprint.pformat(preprocessor.rootfile_chunks))
-            return htcondor_submit(
-                sub, 1, submission_dir=self.rundir, rootfile_chunks=preprocessor.rootfile_chunks
-                )
+            extra_submission_settings['rootfile_chunks'] = preprocessor.rootfile_chunks
         else:
             # Simple case with no items; just use the njobs variable with a default of 1
-            njobs = int(preprocessor.variables.get('njobs', 1))
-            logger.info('Submitting %s jobs with:\n%s', njobs, pprint.pformat(sub))
-            return htcondor_submit(sub, njobs, submission_dir=self.rundir)
+            if 'njobs' in preprocessor.variables:
+                extra_submission_settings['njobs'] = preprocessor.variables['njobs']
+        return sub, extra_submission_settings
+
+    def cmsconnect_settings(self, sub, preprocessor=None):
+        """
+        Adds special cmsconnect settings to submission dict in order to submit
+        on cmsconnect via the python bindings.
+        Modifies the dict in place.
+        """
+        # Maybe just .endwith('.uscms.org') ? Not sure if that would break other sites
+        if os.uname()[1] == 'login.uscms.org' or os.uname()[1] == 'login-el7.uscms.org':
+            logger.warning('Detected CMS Connect; loading specific settings')
+        else:
+            return
+        # Read the central config for cmsconnect
+        try:
+            from configparser import RawConfigParser # python 3
+        except ImportError:
+            import ConfigParser # python 2
+            RawConfigParser = ConfigParser.RawConfigParser
+        cfg = RawConfigParser()
+        cfg.read('/etc/ciconnect/config.ini')
+        sites = cfg.get('submit', 'DefaultSites').split(',')
+        # Check whether the user whitelisted or blacklisted some sites
+        if preprocessor:
+            import fnmatch
+            blacklisted = []
+            whitelisted = []
+            # Build the blacklist
+            if 'sites_blacklist' in preprocessor.variables:
+                for blacksite in preprocessor.variables['sites_blacklist'].split():
+                    for site in sites:
+                        if fnmatch.fnmatch(site, blacksite):
+                            blacklisted.append(site)
+            # Build the whitelist
+            if 'sites_whitelist' in preprocessor.variables:
+                for whitesite in preprocessor.variables['sites_whitelist'].split():
+                    for site in sites:
+                        if fnmatch.fnmatch(site, whitesite):
+                            whitelisted.append(site)
+            blacklisted = list(set(blacklisted))
+            blacklisted.sort()
+            whitelisted = list(set(whitelisted))
+            whitelisted.sort()
+            logger.info('Blacklisting: %s', ','.join(blacklisted))
+            logger.info('Whitelisting: %s', ','.join(whitelisted))
+            sites = list( (set(sites) - set(blacklisted)).union(set(whitelisted)) )
+            sites.sort()
+        logger.info('Submitting to sites: %s', ','.join(sites))
+        sub['+DESIRED_Sites'] = '"' + ','.join(sites) + '"'
+        sub['+ConnectWrapper'] = '"2.0"'
+        logger.warning('FIXME: CMS Connect settings currently hard-coded for a FNAL user')
+        sub['+CMSGroups'] = '"/cms,T3_US_FNALLPC"'
+        sub['+MaxWallTimeMins'] = '500'
+        sub['+ProjectName'] = '"cms.org.fnal"'
+        sub['+SubmitFile'] = '"irrelevant.jdl"'
+        sub['+AccountingGroup'] = '"analysis.{0}"'.format(os.environ['USER'])
+
+    # _________________________________________________________
+    # Prep functions for files needed for the job
+
+    def tar_python_module(self, module_name):
+        """
+        Creates a tarball of a python module that is needed inside the job
+        """
+        if module_name in self._created_python_module_tarballs:
+            logger.debug('Not tarring up %s again, tarball already created', module_name)
+            return
+        logger.info('Creating tarball for python module %s', module_name)
+        import importlib
+        module = importlib.import_module(module_name)
+        tarball = qondor.utils.tarball_python_module(
+            module,
+            outdir = self.rundir,
+            )
+        self.transfer_files.append(tarball)
+        self._created_python_module_tarballs.append(module_name)
 
     def make_rundir(self):
+        """
+        Creates a directory in from which to submit the job
+        """
         self.rundir = osp.abspath('qondor_{0}_{1}'.format(
             self.python_name,
             strftime(qondor.TIMESTAMP_FMT)
@@ -280,17 +280,21 @@ class BaseSubmitter(object):
         self.transfer_files.append(cache_file)
 
     def dump_rootcache(self):
+        """
+        Dumps the current state of the seutils root cache to a file to be used in the job
+        """
         if seutils.root.USE_CACHE:
             rootcache_file = osp.join(self.rundir, 'rootcache.tar.gz')
             if not qondor.DRYMODE: seutils.root.cache_to_file(rootcache_file)
             self.transfer_files.append(rootcache_file)
 
-    def submit(self, python_script_args=None):
+    def iter_submissions(self):
         """
-        Main submission method
+        Does all the prep work for the submission directory, and then
+        loops over all sets and yields (submission_dict, extra_settings) as
+        returned by self.format_for_htcondor_interface
         """
-        all_cluster_ids = []
-        all_ads = []
+        # First do all prep
         at_least_one_job_submitted = False
         try:
             self.make_rundir()
@@ -305,20 +309,19 @@ class BaseSubmitter(object):
                     if install_instruction == 'module-install':
                         self.tar_python_module(package)
                 # Create the bash script entry point for this job
-                shfile = osp.join(self.rundir, '{0}_{1}.sh'.format(self.python_name, i_set))
-                SHFile(preprocessor, python_script_args).to_file(shfile)
+                shfile = osp.join(self.rundir, '{}_{}.sh'.format(self.python_name, i_set))
+                SHFile(preprocessor, self.python_script_args).to_file(shfile)
                 # Submit jobs to htcondor
-                cluster_id, ads = self.submit_to_htcondor(shfile, preprocessor)
-                all_cluster_ids.append(cluster_id)
-                all_ads.extend(ads)
+                yield self.format_for_htcondor_interface(shfile, preprocessor)
                 at_least_one_job_submitted = True
-            return all_cluster_ids, all_ads
         except:
             if not at_least_one_job_submitted:
                 logger.error('Error during submission; cleaning up %s', self.rundir)
-                if osp.isdir(self.rundir):
-                    shutil.rmtree(self.rundir)
+                if osp.isdir(self.rundir) and not qondor.DRYMODE: shutil.rmtree(self.rundir)
             raise
+
+    def submissions(self):
+        return list(iter_submissions)
 
 
 class Submitter(BaseSubmitter):
@@ -328,8 +331,8 @@ class Submitter(BaseSubmitter):
     transfer all relevant files from the job, and start
     running.
     """
-    def __init__(self, python_file, dry=False):
-        super(Submitter, self).__init__(dry)
+    def __init__(self, python_file, python_script_args=None):
+        super(Submitter, self).__init__(python_script_args=python_script_args)
         self.original_python_file = osp.abspath(python_file)
         self.python_base = osp.basename(self.original_python_file)
         self.python_name = self.python_base.replace('.py','')
@@ -393,6 +396,7 @@ def fake_transaction():
         yield None
     finally:
         pass
+
 
 
 def htcondor_submit(sub, njobs=1, submission_dir='.', items=None, rootfile_chunks=None):
