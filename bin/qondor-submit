@@ -24,11 +24,25 @@ def main():
     submit = qondor.schedd.submit_condor_submit_commandline if args.cli else qondor.schedd.submit_pythonbindings
     qondor.utils.check_proxy()
     # Open a cache for any store element requests
+    total_n_submitted = 0
+    # Count the number of jobs still needed to submit (only to be done if args.njobsmax is passed)
+    njobs_left_to_submit = args.njobsmax if args.njobsmax else 1e9
     with seutils.root.cache(cache_dir='.fcache/rootcache-{}'.format(uuid.uuid4())) as cache_dir:
         submitter = qondor.Submitter(args.pythonfile, sysargs_for_python)
         for sub, extra_options in submitter.iter_submissions():
-            if args.njobsmax: extra_options['njobsmax'] = args.njobsmax
-            submit(sub, **extra_options)
+            if args.njobsmax: extra_options['njobsmax'] = njobs_left_to_submit
+            cluster_id, n_submitted = submit(sub, **extra_options)
+            # Convert to int if necessary - only submitting via python bindngs
+            # in non-dry mode will return a list of classads rather than an integer
+            try:
+                n_submitted = len(n_submitted)
+            except TypeError:
+                pass
+            total_n_submitted += n_submitted
+            njobs_left_to_submit -= n_submitted
+            if args.njobsmax and njobs_left_to_submit <= 0:
+                break
+    qondor.logger.info('Submitted %s jobs in total', total_n_submitted)
 
 if __name__ == '__main__':
     main()

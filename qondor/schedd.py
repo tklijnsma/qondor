@@ -371,7 +371,7 @@ def submit_pythonbindings(
     sub = submissiondict.copy() # Create a copy to keep original dict unmodified
     # List to store all submitted job ads
     job_ads = []
-    cluster_id = 0
+    cluster_id = [0]
     n_queued = [0] # Make it a 1-element list so that it's a 'pointer'
     with qondor.utils.switchdir(submissiondir):
         # Make the transaction
@@ -382,7 +382,7 @@ def submit_pythonbindings(
                 ads = []
                 n_queued[0] += njobs
                 if dry: return
-                cluster_id = int(submit_object.queue(transaction, njobs, ads))
+                cluster_id[0] = int(submit_object.queue(transaction, njobs, ads))
                 job_ads.extend(ads)
             # Helper function to test whether the needed amount of jobs to submit
             # is already reached
@@ -416,7 +416,7 @@ def submit_pythonbindings(
                 submit_object = htcondor.Submit(sub)
                 queue(submit_object, njobs if (njobsmax is None) else min(njobs, njobsmax))
     logger.info('Submitted %s jobs to cluster %s', n_queued[0], cluster_id)
-    return cluster_id, job_ads            
+    return cluster_id[0], n_queued[0] if dry else job_ads
 
 def submit_condor_submit_commandline(
     submissiondict, submissiondir='.', dry=None,
@@ -471,20 +471,20 @@ def submit_condor_submit_commandline(
         # Quit now if we don't actually want to submit
         if do_not_submit:
             logger.debug('do_not_submit == True, quiting now')
-            return 0, 0
+            return 0, n_queued
         # Run condor_submit on the jdl file (still in the submission directory)
         output = qondor.utils.run_command(['condor_submit', jdl_file], env=qondor.utils.get_clean_env())
         if dry:
             logger.info('Submitted %s jobs to cluster_id 0', n_queued)
-            return 0, 0
+            return 0, n_queued
         match = re.search(r'(\d+) job\(s\) submitted to cluster (\d+)', '\n'.join(output))
         if match:
             n_submitted = match.group(1)
             cluster_id = match.group(2)
             logger.info('Submitted %s jobs to cluster_id %s', n_submitted, cluster_id)
-            return n_submitted, cluster_id
+            return cluster_id, n_submitted
         else:
             logger.error(
                 'condor_submit exited ok but could not determine where and how many jobs were submitted'
                 )
-            return 0, 0
+            return 0, n_queued
