@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import qondor, seutils
-import argparse, sys, uuid
+import argparse, sys, uuid, os
 parser = argparse.ArgumentParser()
 parser.add_argument('pythonfile', type=str, help='Path to a python file to be submitted to htcondor')
 parser.add_argument('-d', '--dry', action='store_true', help='Prints what would happen does not actually submit a job')
@@ -29,8 +29,12 @@ def main():
     njobs_left_to_submit = args.njobsmax if args.njobsmax else 1e9
     with seutils.root.cache(cache_dir='.fcache/rootcache-{}'.format(uuid.uuid4())) as cache_dir:
         submitter = qondor.Submitter(args.pythonfile, sysargs_for_python)
-        for sub, extra_options in submitter.iter_submissions():
+        for sub, extra_options, preprocessor in submitter.iter_submissions():
             if args.njobsmax: extra_options['njobsmax'] = njobs_left_to_submit
+            # Maybe just .endwith('.uscms.org') ? Not sure if that would break other sites
+            if os.uname()[1] == 'login.uscms.org' or os.uname()[1] == 'login-el7.uscms.org':
+                qondor.logger.warning('Detected CMS Connect; loading specific settings')
+                qondor.submit.cmsconnect_settings(sub, preprocessor=preprocessor, cli=args.cli)
             cluster_id, n_submitted = submit(sub, **extra_options)
             # Convert to int if necessary - only submitting via python bindngs
             # in non-dry mode will return a list of classads rather than an integer

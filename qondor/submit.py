@@ -155,7 +155,6 @@ class BaseSubmitter(object):
         """
         extra_submission_settings = {}
         sub = qondor.schedd.get_default_sub()
-        self.cmsconnect_settings(sub, preprocessor)
         sub['executable'] =  osp.basename(shfile)
         sub['+QondorRundir']  =  '"' + self.rundir + '"'
         sub['environment']['QONDORISET'] = str(preprocessor.subset_index)
@@ -182,61 +181,6 @@ class BaseSubmitter(object):
             if 'njobs' in preprocessor.variables:
                 extra_submission_settings['njobs'] = preprocessor.variables['njobs']
         return sub, extra_submission_settings
-
-    def cmsconnect_settings(self, sub, preprocessor=None):
-        """
-        Adds special cmsconnect settings to submission dict in order to submit
-        on cmsconnect via the python bindings.
-        Modifies the dict in place.
-        """
-        # Maybe just .endwith('.uscms.org') ? Not sure if that would break other sites
-        if os.uname()[1] == 'login.uscms.org' or os.uname()[1] == 'login-el7.uscms.org':
-            logger.warning('Detected CMS Connect; loading specific settings')
-        else:
-            return
-        # Read the central config for cmsconnect
-        try:
-            from configparser import RawConfigParser # python 3
-        except ImportError:
-            import ConfigParser # python 2
-            RawConfigParser = ConfigParser.RawConfigParser
-        cfg = RawConfigParser()
-        cfg.read('/etc/ciconnect/config.ini')
-        sites = cfg.get('submit', 'DefaultSites').split(',')
-        # Check whether the user whitelisted or blacklisted some sites
-        if preprocessor:
-            import fnmatch
-            blacklisted = []
-            whitelisted = []
-            # Build the blacklist
-            if 'sites_blacklist' in preprocessor.variables:
-                for blacksite in preprocessor.variables['sites_blacklist'].split():
-                    for site in sites:
-                        if fnmatch.fnmatch(site, blacksite):
-                            blacklisted.append(site)
-            # Build the whitelist
-            if 'sites_whitelist' in preprocessor.variables:
-                for whitesite in preprocessor.variables['sites_whitelist'].split():
-                    for site in sites:
-                        if fnmatch.fnmatch(site, whitesite):
-                            whitelisted.append(site)
-            blacklisted = list(set(blacklisted))
-            blacklisted.sort()
-            whitelisted = list(set(whitelisted))
-            whitelisted.sort()
-            logger.info('Blacklisting: %s', ','.join(blacklisted))
-            logger.info('Whitelisting: %s', ','.join(whitelisted))
-            sites = list( (set(sites) - set(blacklisted)).union(set(whitelisted)) )
-            sites.sort()
-        logger.info('Submitting to sites: %s', ','.join(sites))
-        sub['+DESIRED_Sites'] = '"' + ','.join(sites) + '"'
-        sub['+ConnectWrapper'] = '"2.0"'
-        logger.warning('FIXME: CMS Connect settings currently hard-coded for a FNAL user')
-        sub['+CMSGroups'] = '"/cms,T3_US_FNALLPC"'
-        sub['+MaxWallTimeMins'] = '500'
-        sub['+ProjectName'] = '"cms.org.fnal"'
-        sub['+SubmitFile'] = '"irrelevant.jdl"'
-        sub['+AccountingGroup'] = '"analysis.{0}"'.format(os.environ['USER'])
 
     # _________________________________________________________
     # Prep functions for files needed for the job
@@ -312,9 +256,12 @@ class BaseSubmitter(object):
                 shfile = osp.join(self.rundir, '{}_{}.sh'.format(self.python_name, i_set))
                 SHFile(preprocessor, self.python_script_args).to_file(shfile)
                 # Submit jobs to htcondor
-                yield self.format_for_htcondor_interface(shfile, preprocessor)
+                yield *self.format_for_htcondor_interface(shfile, preprocessor), preprocessor
                 at_least_one_job_submitted = True
-        except:
+        except StopIteration:
+            pass
+        except Exception as e:
+            logger.error('Exception %s was raised', e)
             if not at_least_one_job_submitted:
                 logger.error('Error during submission; cleaning up %s', self.rundir)
                 if osp.isdir(self.rundir) and not qondor.DRYMODE: shutil.rmtree(self.rundir)
@@ -390,108 +337,59 @@ class CodeSubmitter(BaseSubmitter):
             logger.info('Removing %s', python_file)
             os.remove(python_file)
 
-@contextmanager
-def fake_transaction():
+
+def cmsconnect_settings(sub, preprocessor=None, cli=False):
+    """
+    Adds special cmsconnect settings to submission dict in order to submit
+    on cmsconnect via the python bindings, or in case of submitting by the
+    command line, to set the DESIRED_Sites key.
+    Modifies the dict in place.
+    """
+    # Read the central config for cmsconnect
     try:
-        yield None
-    finally:
-        pass
-
-
-
-def htcondor_submit(sub, njobs=1, submission_dir='.', items=None, rootfile_chunks=None):
-    """
-    Submits the submission dict `sub` to the best scheduler.
-    If items are passed, it submits 1 job per item, and makes sure
-    to set the item in the environment of the job in $QONDORITEM.
-    If rootfile_chunks are passed, it submits 1 job per chunk, and
-    makes sure to set the chunk in the environment of the job in
-    $QONDORROOTFILECHUNK.
-    If neither of those are set, it submits `njobs` without setting
-    anything specific per job in the job's environment.
-    Returns the cluster id and class ad of the submitted job
-    """
-    dry = qondor.DRYMODE
-    import htcondor
-    schedd = qondor.get_best_schedd(renew=True)
-    with qondor.utils.switchdir(submission_dir):
-        # Create a copy to keep original dict unmodified
-        # Make the transaction
-        subcopy = sub.copy()
-        with (fake_transaction() if dry else schedd.transaction()) as transaction:
-            ads = []
-            if items:
-                # Items logic: Turn any potential list into a ','-separated string,
-                # and set the environment variable QONDORITEM to that string.
-                subcopy['environment']['QONDORITEM'] = 'placeholder' # Placeholder
-                subcopy['environment'] = htcondor_format_environment(subcopy['environment'])
-                submit_object = htcondor.Submit(subcopy)
-                for item in items:
-                    # Ensure the string will be ',' separated (a len-1 list will not have a comma)
-                    # Also ensure there are no quotes in it, which would screw up condor's reading
-                    if qondor.utils.is_string(item):
-                        item = [item]
-                    elif len(item) == 1:
-                        # Exceptional case: a len-1 list passed is indistinguishable from just a string
-                        # If chunk_size is set to 1, it is intended that QONDORITEM is a len-1 list,
-                        # but the ','.join() statement makes the item look like a simple string.
-                        # Add an initial comma as a hack to tell qondor that the item is meant to be a
-                        # len-1 list.
-                        item[0] = ',' + item[0]
-                    item = ','.join([i.replace('\'','').replace('"','') for i in item])
-                    # Change the env variable in the submitobject
-                    change_submitobject_env_variable(submit_object, 'QONDORITEM', item)
-                    # Submit again and record cluster_id and job ads
-                    ad = []
-                    cluster_id = 0 if dry else submit_object.queue(transaction, njobs, ad)
-                    cluster_id = int(cluster_id)
-                    ads.extend(ad)
-            elif rootfile_chunks:
-                # Set the chunk as a string in the environment as follows:
-                # rootfile,first,last,is_whole_file;rootfile,first,last,is_whole_file;...
-                # Convert is_whole_file to either 0 or 1 first (converting bool to str
-                # yields 'True' or 'False', but str('False') yields True...)
-                format_chunk = lambda chunk: ';'.join(
-                    [','.join([ str(e[0]), str(e[1]), str(e[2]), str(int(e[3])) ]) for e in chunk]
-                    )
-                subcopy['environment']['QONDORROOTFILECHUNK'] = 'placeholder'
-                subcopy['environment'] = htcondor_format_environment(subcopy['environment'])
-                submit_object = htcondor.Submit(subcopy)                
-                for chunk in rootfile_chunks:
-                    change_submitobject_env_variable(submit_object, 'QONDORROOTFILECHUNK', format_chunk(chunk))
-                    ad = []
-                    cluster_id = submit_object.queue(transaction, njobs, ad)
-                    cluster_id = int(cluster_id)
-                    ads.extend(ad)
-            else:
-                subcopy['environment'] = htcondor_format_environment(subcopy['environment'])
-                submit_object = htcondor.Submit(subcopy)
-                cluster_id = submit_object.queue(transaction, njobs, ads)
-                cluster_id = int(cluster_id)
-    logger.info('Submitted %s jobs to cluster %s', len(ads), cluster_id)
-    return cluster_id, ads
-
-
-def change_submitobject_env_variable(submitobject, key, value):
-    """
-    Tries to replace an environment variable in a Submit-object.
-    This hack is needed to have items be in the same cluster.
-    """
-    env = submitobject['environment']
-    new_env = re.sub(key + r'=\'.*?\'', '{0}=\'{1}\''.format(key, value), env)
-    logger.debug('Replacing:\n  %s\n  by\n  %s', env, new_env)
-    submitobject['environment'] = new_env
-
-
-def htcondor_format_environment(env):
-    """
-    Takes a dict of key : value pairs that are both strings, and
-    returns a string that is formatted so that htcondor can turn it
-    into environment variables
-    """
-    return ('"' +
-        ' '.join(
-            [ '{0}=\'{1}\''.format(key, value) for key, value in env.items() ]
-            )
-        + '"'
-        )
+        from configparser import RawConfigParser # python 3
+    except ImportError:
+        import ConfigParser # python 2
+        RawConfigParser = ConfigParser.RawConfigParser
+    cfg = RawConfigParser()
+    cfg.read('/etc/ciconnect/config.ini')
+    sites = cfg.get('submit', 'DefaultSites').split(',')
+    all_sites = set(sites)
+    # Check whether the user whitelisted or blacklisted some sites
+    if preprocessor:
+        import fnmatch
+        blacklisted = []
+        whitelisted = []
+        # Build the blacklist
+        if 'sites_blacklist' in preprocessor.variables:
+            for blacksite in preprocessor.variables['sites_blacklist'].split():
+                for site in sites:
+                    if fnmatch.fnmatch(site, blacksite):
+                        blacklisted.append(site)
+        # Build the whitelist
+        if 'sites_whitelist' in preprocessor.variables:
+            for whitesite in preprocessor.variables['sites_whitelist'].split():
+                for site in sites:
+                    if fnmatch.fnmatch(site, whitesite):
+                        whitelisted.append(site)
+        blacklisted = list(set(blacklisted))
+        blacklisted.sort()
+        whitelisted = list(set(whitelisted))
+        whitelisted.sort()
+        logger.info('Blacklisting: %s', ','.join(blacklisted))
+        logger.info('Whitelisting: %s', ','.join(whitelisted))
+        sites = list( (set(sites) - set(blacklisted)).union(set(whitelisted)) )
+        sites.sort()
+    logger.info('Submitting to sites: %s', ','.join(sites))
+    # Add a plus only if submitting via .jdl file
+    addplus = lambda key: '+' + key if cli else key
+    if all_sites != set(sites):
+        sub[addplus('DESIRED_Sites')] = '"' + ','.join(sites) + '"'
+    if not cli:
+        sub[addplus('ConnectWrapper')] = '"2.0"'
+        sub[addplus('CMSGroups')] = '"/cms,T3_US_FNALLPC"'
+        sub[addplus('MaxWallTimeMins')] = '500'
+        sub[addplus('ProjectName')] = '"cms.org.fnal"'
+        sub[addplus('SubmitFile')] = '"irrelevant.jdl"'
+        sub[addplus('AccountingGroup')] = '"analysis.{0}"'.format(os.environ['USER'])
+        logger.warning('FIXME: CMS Connect settings currently hard-coded for a FNAL user')
