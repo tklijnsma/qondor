@@ -179,7 +179,7 @@ class BaseSubmitter(object):
         else:
             # Simple case with no items; just use the njobs variable with a default of 1
             if 'njobs' in preprocessor.variables:
-                extra_submission_settings['njobs'] = preprocessor.variables['njobs']
+                extra_submission_settings['njobs'] = int(preprocessor.variables['njobs'])
         return sub, extra_submission_settings
 
     # _________________________________________________________
