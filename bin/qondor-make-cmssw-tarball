@@ -1,0 +1,29 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+import qondor, seutils
+import argparse, sys, uuid, os.path as osp
+parser = argparse.ArgumentParser()
+parser.add_argument('cmsswpath', type=str, help='Path to a CMSSW distribution')
+parser.add_argument('-o', '--out', type=str, help='Destination directory of the output tarball', default='.')
+parser.add_argument('-t', '--tag', type=str, help='Tag to append to output tarball', default=None)
+parser.add_argument('-d', '--dry', action='store_true', help='Dry mode')
+args = parser.parse_args()
+
+def main():
+    if args.dry:
+        # seutils.drymode()
+        qondor.drymode()
+
+    base = osp.basename(args.cmsswpath)
+    cmssw = qondor.CMSSW(osp.join(args.cmsswpath, 'src'))
+
+    if seutils.has_protocol(args.out):
+        tarball = cmssw.make_tarball(outdir='.', tag=args.tag)
+        qondor.utils.check_proxy()
+        if not args.dry: seutils.cp(tarball, args.out)
+    else:
+        tarball = cmssw.make_tarball(outdir=args.out, tag=args.tag)
+
+
+if __name__ == '__main__':
+    main()

@@ -13,7 +13,8 @@ setup(
     zip_safe      = False,
     scripts       = [
         'bin/qondor-submit',
-        'bin/qondor-sleepuntil'
+        'bin/qondor-sleepuntil',
+        'bin/qondor-make-cmssw-tarball'
         ],
     install_requires     = ['seutils'],
     include_package_data = True,

@@ -219,10 +219,14 @@ def get_exitcode(cmd):
     if is_string(cmd): cmd = [cmd]
     logger.debug('Getting exit code for "%s"', ' '.join(cmd))
     FNULL = open(os.devnull, 'w')
-    process = subprocess.Popen(cmd, stdout=FNULL, stderr=subprocess.STDOUT)
-    process.communicate()[0]
-    logger.debug('Got exit code %s', process.returncode)
-    return process.returncode
+    if qondor.DRYMODE:
+        returncode = 0
+    else:
+        process = subprocess.Popen(cmd, stdout=FNULL, stderr=subprocess.STDOUT)
+        process.communicate()[0]
+        returncode = process.returncode
+    logger.debug('Got exit code %s', returncode)
+    return returncode
 
 
 def is_string(string):
@@ -502,6 +506,7 @@ def check_proxy():
     Asserts that the user has a grid proxy that is valid for at least 168 more hours (1 week)
     """
     # cmd = 'voms-proxy-info -exists -valid 168:00' # Check if there is an existing proxy for a full week
+    if qondor.DRYMODE: return
     try:
         proxy_valid = subprocess.check_output(['grid-proxy-info', '-exists', '-valid', '168:00']) == 0
         logger.info('Found a valid proxy')
