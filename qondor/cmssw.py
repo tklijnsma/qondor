@@ -219,6 +219,7 @@ class CMSSW(object):
             cmd.extend(['--exclude={0}'.format(e) for e in exclude])
             cmd.append(osp.basename(cmssw_path))
             qondor.utils.run_command(cmd)
+        return dst
 
     def pip(self, *args):
         """
