@@ -188,12 +188,12 @@ def get_chunk_as_rootfile(dst='chunk.root', cmssw=None):
         seutils.root.hadd_chunk_entries(chunk, dst)
     return dst
 
-def init_cmssw(tarball_key='cmssw_tarball', scram_arch=None):
+def init_cmssw(tarball_key='cmssw_tarball', scram_arch=None, outdir=None):
     """
     A shortcut function to quickly extract and setup a CMSSW tarball
     """
     cmssw_tarball = get_preproc().files[tarball_key]
-    cmssw = CMSSW.from_tarball(cmssw_tarball, scram_arch)
+    cmssw = CMSSW.from_tarball(cmssw_tarball, scram_arch, outdir=outdir)
     return cmssw
 
 def get_var(variable):
