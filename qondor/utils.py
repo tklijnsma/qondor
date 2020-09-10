@@ -385,7 +385,14 @@ def extract_tarball_cmssw(tarball, outdir='.', dry=None):
     extract_tarball(tarball, outdir, dry)
     # return the CMSSW directory
     if dry: return 'CMSSW_dry'
-    return [ d for d in glob.glob(osp.join(outdir, 'CMSSW*')) if not d.endswith('.gz')][0]
+    # Get the extracted directory from the tarball:
+    import tarfile
+    for name in tarfile.open(tarball).getnames():
+        if name.startswith('CMSSW'):
+            break
+    else:
+        raise RuntimeError('Could not find any directory in {} that starts with "CMSSW"'.format(tarball))
+    return osp.join(outdir, name)
 
 
 def check_is_cmssw_path(path):
