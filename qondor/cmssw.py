@@ -16,7 +16,14 @@ class CMSSW(object):
                 'Will extract %s to default: %s',
                 tarball, outdir
                 )
-        qondor.utils.create_directory(outdir)
+            try:
+                qondor.utils.create_directory(outdir)
+            except:
+                logger.warning('Failed to create %s; attempting here (.)', outdir)
+                outdir = '.'
+                qondor.utils.create_directory(outdir)
+        else:
+            qondor.utils.create_directory(outdir)
         cmssw_dir = qondor.utils.extract_tarball_cmssw(tarball, outdir=outdir)
         cmssw_src = osp.abspath(osp.join(cmssw_dir, 'src'))
         return cmssw_src
