@@ -22,6 +22,7 @@ from .preprocess import Preprocessor, preprocessing
 from .submit import SHFile, Submitter, CodeSubmitter
 from .cmssw import CMSSW
 from .cmssw_releases import get_arch
+from . import svj
 import seutils
 
 
@@ -223,3 +224,6 @@ def get_submission_time():
     else:
         logger.info('Local mode - returning current time')
         return datetime.now()
+
+def get_submission_timestr(fmt='%b%d'):
+    return get_submission_time().strftime(fmt)
