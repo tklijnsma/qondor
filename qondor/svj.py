@@ -156,7 +156,7 @@ class CMSSW(qondor.CMSSW):
         for inpre, outpre in zip(inpres, outpres):
             expected_outfile = self.run_step(
                 inpre, outpre, physics,
-                n_attempts = 3 if 'RECO' in outpre else 1
+                n_attempts = 3 if ('RECO' in outpre or 'DIGI' in outpre) else 1
                 )
         return expected_outfile
     
