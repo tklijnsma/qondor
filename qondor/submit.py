@@ -122,7 +122,12 @@ class SHFile(object):
             except ImportError:  # py2
                 from pipes import quote
             python_cmd += ' ' + ' '.join([quote(s) for s in self.python_script_args])
-        return [python_cmd, '']
+        lines = [
+            python_cmd,
+            'echo "$?" > exitcode_${CONDOR_CLUSTER_NUMBER}_${CONDOR_PROCESS_ID}.txt', # Store the python exit code in a file
+            ''
+            ]
+        return lines
 
 
 class BaseSubmitter(object):

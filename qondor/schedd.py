@@ -255,7 +255,7 @@ def wait(cluster_id, proc_id=None, n_sleep=10):
 def get_default_sub():
     """
     Returns the default submission dict (the equivalent of a .jdl file)
-    to be used by the submitter. Implemented like this to be subclassable.
+    to be used by the submitter.
     """
     sub = {
         'universe' : 'vanilla',
@@ -473,7 +473,10 @@ def submit_condor_submit_commandline(
             logger.debug('do_not_submit == True, quiting now')
             return 0, n_queued
         # Run condor_submit on the jdl file (still in the submission directory)
-        output = qondor.utils.run_command(['condor_submit', jdl_file], env=qondor.utils.get_clean_env())
+        output = qondor.utils.run_command(
+            ['condor_submit', jdl_file],
+            # env=qondor.utils.get_clean_env()
+            )
         if dry:
             logger.info('Submitted %s jobs to cluster_id 0', n_queued)
             return 0, n_queued
