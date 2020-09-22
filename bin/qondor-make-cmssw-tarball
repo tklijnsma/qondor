@@ -7,6 +7,7 @@ parser.add_argument('cmsswpath', type=str, help='Path to a CMSSW distribution')
 parser.add_argument('-o', '--out', type=str, help='Destination directory of the output tarball', default='.')
 parser.add_argument('-t', '--tag', type=str, help='Tag to append to output tarball', default=None)
 parser.add_argument('-d', '--dry', action='store_true', help='Dry mode')
+parser.add_argument('--exclude', type=str, nargs='*', default='Extra exclude patters for tarball making')
 args = parser.parse_args()
 
 def main():
@@ -18,11 +19,11 @@ def main():
     cmssw = qondor.CMSSW(osp.join(args.cmsswpath, 'src'))
 
     if seutils.has_protocol(args.out):
-        tarball = cmssw.make_tarball(outdir='.', tag=args.tag)
+        tarball = cmssw.make_tarball(outdir='.', tag=args.tag, exclude=args.exclude)
         qondor.utils.check_proxy()
         if not args.dry: seutils.cp(tarball, args.out)
     else:
-        tarball = cmssw.make_tarball(outdir=args.out, tag=args.tag)
+        tarball = cmssw.make_tarball(outdir=args.out, tag=args.tag, exclude=args.exclude)
 
 
 if __name__ == '__main__':
