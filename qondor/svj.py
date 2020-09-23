@@ -76,6 +76,7 @@ def step_cmd(inpre, outpre, physics):
         ' inpre={inpre}'
         .format(inpre=inpre, outpre=outpre, **physics)
         )
+    if 'mingenjetpt' in physics: cmd += ' mingenjetpt={0:.1f}'.format(physics['mingenjetpt'])
     if 'boost' in physics: cmd += ' boost={0:.0f}'.format(physics['boost'])
     if 'max_events' in physics: cmd += ' maxEvents={0}'.format(physics['max_events'])
     return cmd
