@@ -86,7 +86,15 @@ def init_cmssw(tarball_key='cmssw_tarball', scram_arch=None, outdir=None):
     """
     Like the main qondor.init_cmssw, but for qondor.svj.CMSSW
     """
-    cmssw_tarball = qondor.get_preproc().files[tarball_key]
+    if osp.isfile(tarball_key):
+        # A path to a local tarball was given
+        cmssw_tarball = tarball_key
+    elif seutils.has_protocol(tarball_key):
+        # A path to a tarball on a storage element was given
+        cmssw_tarball = tarball_key
+    else:
+        # A key to a file in the preprocessing was given
+        cmssw_tarball = get_preproc().files[tarball_key]
     cmssw = CMSSW.from_tarball(cmssw_tarball, scram_arch, outdir=outdir)
     return cmssw
 
@@ -160,4 +168,3 @@ class CMSSW(qondor.CMSSW):
                 n_attempts = 3 if ('RECO' in outpre or 'DIGI' in outpre) else 1
                 )
         return expected_outfile
-    
