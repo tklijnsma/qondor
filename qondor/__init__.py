@@ -191,9 +191,18 @@ def get_chunk_as_rootfile(dst='chunk.root', cmssw=None):
 
 def init_cmssw(tarball_key='cmssw_tarball', scram_arch=None, outdir=None):
     """
-    A shortcut function to quickly extract and setup a CMSSW tarball
+    A shortcut function to quickly extract and setup a CMSSW tarball.
+    The first argument `tarball_key` may also be a path (either on a storage element or local).
     """
-    cmssw_tarball = get_preproc().files[tarball_key]
+    if osp.isfile(tarball_key):
+        # A path to a local tarball was given
+        cmssw_tarball = tarball_key
+    elif seutils.has_protocol(tarball_key):
+        # A path to a tarball on a storage element was given
+        cmssw_tarball = tarball_key
+    else:
+        # A key to a file in the preprocessing was given
+        cmssw_tarball = get_preproc().files[tarball_key]
     cmssw = CMSSW.from_tarball(cmssw_tarball, scram_arch, outdir=outdir)
     return cmssw
 
