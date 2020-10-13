@@ -195,6 +195,36 @@ def run_multiple_commands(cmds, env=None, dry=None):
     else:
         raise subprocess.CalledProcessError(cmd, returncode)
 
+def download_url_to_str(url):
+    """
+    Downloads a url and puts the contents in a string
+    """
+    logger.info('Retrieving url %s', url)
+    try:
+        import urllib.request
+        with urllib.request.urlopen(url) as f:
+            html = f.read().decode('utf-8')
+    except ImportError:
+        import urllib2
+        response = urllib2.urlopen('http://www.example.com/')
+        html = response.read()
+    return html
+
+def iter_strip_comments(python_code):
+    '''
+    Strips comments from python code as a string.
+    Does *not* handle '#' appearing in a string
+    '''
+    for line in python_code.split('\n'):
+        line = line.split('#')[0].strip()
+        if not len(line): continue
+        yield line
+
+def strip_comments(python_code):
+    '''
+    As iter_strip_comments but returns a list
+    '''
+    return '\n'.join(iter_strip_comments(python_code))
 
 class DummyFile(object):
     def write(self, text):

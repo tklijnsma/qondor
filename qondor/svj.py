@@ -81,24 +81,6 @@ def step_cmd(inpre, outpre, physics):
     if 'max_events' in physics: cmd += ' maxEvents={0}'.format(physics['max_events'])
     return cmd
 
-
-def init_cmssw(tarball_key='cmssw_tarball', scram_arch=None, outdir=None):
-    """
-    Like the main qondor.init_cmssw, but for qondor.svj.CMSSW
-    """
-    if osp.isfile(tarball_key):
-        # A path to a local tarball was given
-        cmssw_tarball = tarball_key
-    elif seutils.has_protocol(tarball_key):
-        # A path to a tarball on a storage element was given
-        cmssw_tarball = tarball_key
-    else:
-        # A key to a file in the preprocessing was given
-        cmssw_tarball = get_preproc().files[tarball_key]
-    cmssw = CMSSW.from_tarball(cmssw_tarball, scram_arch, outdir=outdir)
-    return cmssw
-
-
 class CMSSW(qondor.CMSSW):
     '''Subclass of the main CMSSW class for SVJ'''
     def __init__(self, *args, **kwargs):
@@ -168,3 +150,86 @@ class CMSSW(qondor.CMSSW):
                 n_attempts = 3 if ('RECO' in outpre or 'DIGI' in outpre) else 1
                 )
         return expected_outfile
+
+
+class TreeMakerCMSSW(qondor.CMSSW):
+    '''Subclass of the main CMSSW class for SVJ'''
+
+    _readfiles_cache = {}
+
+    def __init__(self, *args, **kwargs):
+        super(TreeMakerCMSSW, self).__init__(*args, **kwargs)
+        self.treemaker_path = osp.join(self.cmssw_src, 'TreeMaker/Production/test')
+
+    @classmethod
+    def get_readfiles(cls, bkg):
+        '''
+        Hacky: gets the readFiles from the main TreeMaker repo.
+        Caches results in class variable so subsequent calls just use the cache
+        '''
+        if bkg in cls._readfiles_cache:
+            return cls._readfiles_cache[bkg]
+        import re
+        scenario, bkg_string = bkg.split('.',1)
+        url = (
+            'https://raw.githubusercontent.com/TreeMaker/TreeMaker/Run2_2017/Production/python/{}/{}_cff.py'
+            .format(scenario, bkg_string)
+            )
+        text = qondor.utils.strip_comments(qondor.utils.download_url_to_str(url))
+        rootfiles = re.findall(r'/store/mc.*?root', text)
+        cls._readfiles_cache[bkg] = rootfiles # Cache result so we can safely call the method again
+        return rootfiles
+
+    @classmethod
+    def count_readfiles(cls, bkg):
+        return len(cls.get_readfiles(bkg))
+
+    def command_bkg(self, bkg, i_file, n_events=None):
+        scenario = bkg.split('.')[0]
+        cmd = (
+            'cmsRun runMakeTreeFromMiniAOD_cfg.py'
+            ' outfile=outfile'
+            ' scenario={}'
+            ' inputFilesConfig={}'
+            ' lostlepton=0'
+            ' doZinv=0'
+            ' systematics=0'
+            ' deepAK8=0'
+            ' deepDoubleB=0'
+            ' doPDFs=0'
+            ' nestedVectors=False'
+            ' splitLevel=99'
+            ' nstart={}'
+            ' nfiles=1'
+            .format(scenario, bkg, i_file)
+            )
+        if n_events:
+            cmd += ' numevents={}'.format(n_events)
+        return cmd
+
+    def run_bkg(self, *args, **kwargs):
+        self.run_commands([
+            'cd {0}'.format(self.treemaker_path),
+            self.command_bkg(*args, **kwargs)
+            ])
+        expected_outfile = osp.join(self.treemaker_path, 'outfile_RA2AnalysisTree.root')
+        return expected_outfile
+
+def init_cmssw(tarball_key='cmssw_tarball', scram_arch=None, outdir=None, init_class=CMSSW):
+    """
+    Like the main qondor.init_cmssw, but for qondor.svj.CMSSW
+    """
+    if osp.isfile(tarball_key):
+        # A path to a local tarball was given
+        cmssw_tarball = tarball_key
+    elif seutils.has_protocol(tarball_key):
+        # A path to a tarball on a storage element was given
+        cmssw_tarball = tarball_key
+    else:
+        # A key to a file in the preprocessing was given
+        cmssw_tarball = qondor.get_preproc().files[tarball_key]
+    cmssw = init_class.from_tarball(cmssw_tarball, scram_arch, outdir=outdir)
+    return cmssw
+
+def init_cmssw_treemaker(*args, **kwargs):
+    return init_cmssw(init_class=TreeMakerCMSSW, *args, **kwargs)

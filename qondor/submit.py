@@ -162,7 +162,7 @@ class BaseSubmitter(object):
         sub = qondor.schedd.get_default_sub()
         sub['executable'] =  osp.basename(shfile)
         sub['+QondorRundir']  =  '"' + self.rundir + '"'
-        sub['environment']['QONDORISET'] = str(preprocessor.subset_index)
+        sub['environment']['QONDORISCOPE'] = str(preprocessor.subscope_index)
         # Overwrite htcondor keys defined in the preprocessing
         sub.update(preprocessor.htcondor)
         # Flatten files into a string, excluding files on storage elements
@@ -240,25 +240,25 @@ class BaseSubmitter(object):
     def iter_submissions(self):
         """
         Does all the prep work for the submission directory, and then
-        loops over all sets and yields (submission_dict, extra_settings) as
+        loops over all scopes and yields (submission_dict, extra_settings) as
         returned by self.format_for_htcondor_interface
         """
         # First do all prep
         at_least_one_job_submitted = False
         try:
             self.make_rundir()
-            self.copy_python_file()
+            self.create_python_file()
             self.dump_ls_cache_file()
             self.dump_rootcache()
-            # Loop over all 'sets'
-            # If there are no subsets, this is just a len(1) iterator of the preprocessing
-            for i_set, preprocessor in enumerate(self.preprocessing.sets()):
+            # Loop over all 'scopes'
+            # If there are no subscopes, this is just a len(1) iterator of the preprocessing
+            for i_scope, preprocessor in enumerate(self.preprocessing.scopes()):
                 # Create tarballs for local python modules
                 for package, install_instruction in preprocessor.pip:
                     if install_instruction == 'module-install':
                         self.tar_python_module(package)
                 # Create the bash script entry point for this job
-                shfile = osp.join(self.rundir, '{}_{}.sh'.format(self.python_name, i_set))
+                shfile = osp.join(self.rundir, '{}_{}.sh'.format(self.python_name, i_scope))
                 SHFile(preprocessor, self.python_script_args).to_file(shfile)
                 # Submit jobs to htcondor
                 sub, extra_settings = self.format_for_htcondor_interface(shfile, preprocessor)
@@ -274,7 +274,7 @@ class BaseSubmitter(object):
             raise
 
     def submissions(self):
-        return list(iter_submissions)
+        return list(self.iter_submissions())
 
 
 class Submitter(BaseSubmitter):
@@ -291,10 +291,18 @@ class Submitter(BaseSubmitter):
         self.python_name = self.python_base.replace('.py','')
         self.preprocessing = qondor.Preprocessor(self.original_python_file)
 
-    def copy_python_file(self):
+    def create_python_file(self):
         self.python_file = osp.join(self.rundir, self.python_base)
         qondor.utils.copy_file(self.original_python_file, self.python_file)
         self.transfer_files.append(self.python_file)
+
+
+class SubmitterPreproc(BaseSubmitter):
+    """
+    Submits from a preprocessor object directly.
+    """
+    def __init__(self, preprocessing):
+        pass
 
 
 class CodeSubmitter(BaseSubmitter):
@@ -310,7 +318,7 @@ class CodeSubmitter(BaseSubmitter):
         self.python_name = name if name else 'fromcode'
         self.preprocessing = qondor.Preprocessor.from_lines(self.preprocessing_code)
 
-    def copy_python_file(self):
+    def create_python_file(self):
         self.python_file = osp.join(self.rundir, 'pythoncode.py')
         logger.info('Writing %s lines of code to %s', len(self.python_code), self.python_file)
         with open(self.python_file, 'w') as f:

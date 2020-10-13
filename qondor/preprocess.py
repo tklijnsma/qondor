@@ -89,8 +89,8 @@ class Preprocessor(object):
             with open(cache_file, 'w') as f:
                 json.dump(cls.LS_CACHE, f)
 
-    # Counter for the number of subsets that have been created
-    ISET = 0
+    # Counter for the number of scopes that have been created
+    ISCOPE = 0
 
     allowed_pip_install_instructions = [
         'module-install',
@@ -99,14 +99,24 @@ class Preprocessor(object):
         ]
 
     @classmethod
-    def from_lines(cls, lines):
+    def from_lines(cls, lines, *args, **kwargs):
         """For legacy"""
-        return cls(lines=lines)
+        instance = cls(*args, **kwargs)
+        instance.readlines(lines)
+        return instance
 
-    def __init__(self, filename=None, lines=None, parent=None, ls_cache_file=None):
+    @classmethod
+    def from_file(cls, filename, *args, **kwargs):
+        with open(filename, 'r') as f:
+            lines = f.readlines()
+        instance = cls.from_lines(lines, *args, **kwargs)
+        instance.filename = osp.abspath(filename)
+        return instance
+
+    def __init__(self, lines=None, parent=None, ls_cache_file=None):
         super(Preprocessor, self).__init__()
         self.parent = parent
-        self.subsets = []
+        self.scopes = []
         self.htcondor = {}
         self.pip = []
         self.env = {}
@@ -120,8 +130,8 @@ class Preprocessor(object):
         self.ls_cache = {}
         self.ls_cache_file = ls_cache_file
         # Count how many Preprocessor instances there are
-        self.subset_index = self.__class__.ISET
-        self.__class__.ISET += 1
+        self.scope_index = self.__class__.ISCOPE
+        self.__class__.ISCOPE += 1
         if self.is_master():
             # It's the master Preprocessor instance; set some defaults
             self.pip = [
@@ -143,21 +153,14 @@ class Preprocessor(object):
                     'rootsetup' : '/cvmfs/sft.cern.ch/lcg/releases/LCG_95/ROOT/6.16.00/x86_64-centos7-gcc7-opt/ROOT-env.sh',
                     'SCRAM_ARCH' : 'slc7_amd64_gcc820',
                     }
-        # Read lines if necessary
-        if filename and not lines:
-            self.filename = osp.abspath(filename)
-            self.preprocess()
-        elif lines and not filename:
-            self.preprocess_lines(lines)
-        elif lines and filename:
-            raise ValueError('Pass either filename or lines as an init argument')
 
     def is_master(self):
         return self.parent is None # Should only be true for the master processor
 
     def merge(self, base):
         """
-        Takes base preprocessor variables and adds self on top of it, so that base things are inherited
+        Takes base preprocessor variables and adds self on top of it, so that base things are inherited.
+        This useful to generate subscopes.
         """
         # Overwrite style:
         self.htcondor = dict(base.htcondor, **self.htcondor)
@@ -172,36 +175,36 @@ class Preprocessor(object):
         self.rootfile_chunks = base.rootfile_chunks + self.rootfile_chunks
         self.pip = base.pip + self.pip
 
-    def sets(self):
+    def scopes(self):
         """
-        Iteratively loops through subsets, updates with parent variables,
-        and yields the lowest level subsets (i.e. ones without children).
-        Each subset is a full Preprocessor instance.
+        Iteratively loops through scopes, updates with parent variables,
+        and yields the lowest level scopes (i.e. ones without children).
+        Each scope is a full Preprocessor instance.
         """
-        if len(self.subsets) == 0:
+        if len(self.scopes) == 0:
             yield self
         else:
-            for subset in self.subsets:
-                subset.merge(self)
+            for scope in self.scopes:
+                scope.merge(self)
                 # Iterate
-                for s in subset.sets():
+                for s in scope.scopes():
                     yield s
 
     def all_items(self):
         """
-        Returns all items of subsets below.
+        Returns all items of scopes below.
         """
         all_items = []
-        for s in self.sets():
+        for s in self.scopes():
             all_items.extend(s.items)
         return all_items
 
     def all_rootfile_chunks(self):
         """
-        Returns all rootfile_chunks of subsets below.
+        Returns all rootfile_chunks of scopes below.
         """
         all_rootfile_chunks = []
-        for s in self.sets():
+        for s in self.scopes():
             all_rootfile_chunks.extend(s.rootfile_chunks)
         return all_rootfile_chunks
 
@@ -222,73 +225,100 @@ class Preprocessor(object):
         return instruction
 
     def get_item(self):
-        if not(len(self.split_transactions)):
-            raise RuntimeError(
-                '.get_item() should only be called if transactions are split. '
-                'Either .preprocess() is not yet called, or there is no split_transactions '
-                'directive.'
-                )
         if qondor.BATCHMODE:
             return os.environ['QONDORITEM']
         else:
             logger.debug('Local mode: returning first item of %s', self.split_transactions)
             return self.split_transactions[0]
 
-    def preprocess(self):
-        """
-        Wrapper for self.preprocess_lines that just takes a path to a file
-        rather than direct lines
-        """
-        # Pass the list rather than the iterator, since sets might make slices
-        self.preprocess_lines(get_preprocess_file(self.filename))
-
     def preprocess_lines(self, lines):
-        # Preprocesses a list of lines
-        # Starts a subset upon encountering the keyword 'set'
+        """
+        Preprocesses a list of lines
+        Starts a scope upon encountering the keyword 'scope'
+        """
         line_iterator = enumerate(lines)
         for i_line, line in line_iterator:
             logger.debug('Processing l%s: %s', i_line, line)
             line = line.strip()
             if len(line) == 0:
                 continue
-            elif line.startswith('endset'):
-                # This marks the end of a set, so stop preprocessing lines in this processor
-                # If this preprocessor is the master, an endset must have been encountered without
-                # a matching starting set-line
+            elif line.startswith('endscope'):
+                # This marks the end of a scope, so stop preprocessing lines in this processor
+                # If this preprocessor is the master, an endscope must have been encountered without
+                # a matching starting scope-line
                 if self.is_master():
                     raise ValueError(
-                        'Encountered endset without a matching opening set:\n'
+                        'Encountered endscope without a matching opening scope:\n'
                         '--> l{0}: {1}'.format(i_line, line)
                         )
                 # Return the line index so that the parent processor can skip the lines processed
-                # in this set.
-                # Note this line number will be the 'local' line number of the subset of lines
+                # in this scope.
+                # Note this line number will be the 'local' line number of the scope of lines
                 # that was passed to the child processor
-                logger.debug('Closing set at line %s', i_line)
+                logger.debug('Closing scope at line %s', i_line)
                 return i_line
-            elif line.startswith('set ') or line == 'set':
-                # Start a subset from this line forward
-                logger.debug('Starting new set')
-                subset = Preprocessor(parent=self)
-                self.subsets.append(subset)
-                i_line_endset = subset.preprocess_lines(lines[i_line+1:])
-                # Skip lines processed in the subset
-                for i in range(i_line_endset+1):
+            elif line.startswith('scope ') or line == 'scope':
+                # Start a scope from this line forward
+                logger.debug('Starting new scope')
+                scope = Preprocessor(parent=self)
+                self.scopes.append(scope)
+                i_line_endscope = scope.preprocess_lines(lines[i_line+1:])
+                # Skip lines processed in the scope
+                for i in range(i_line_endscope+1):
                     try:
                         i_line_skip, line_skip = next(line_iterator)
-                        logger.debug('Skipping l%s: "%s" (already used in subset)', i_line_skip, line_skip)
+                        logger.debug('Skipping l%s: "%s" (already used in scope)', i_line_skip, line_skip)
                     except StopIteration:
                         # If this happens there is a bug in the code
-                        logger.error('StopIteration occured while skipping lines in a subset')
+                        logger.error('StopIteration occured while skipping lines in a scope')
                         raise
                 continue
             else:
                 self.preprocess_line(line)
-        # Only the master should make it to here - subsets should be closed with an endset tag
+        # Only the master should make it to here - scopes should be closed with an endscope tag
         if not self.is_master():
             raise ValueError(
-                'Encountered EOF without an expected closing endset'
+                'Encountered EOF without an expected closing endscope'
                 )
+
+    def eval_expr(self, expr):
+        """
+        Evaluates an expression in the preprocessing scope
+        """
+        scope = dict(
+            self.variables,
+            htcondor = self.htcondor,
+            env = self.env,
+            items = self.items,
+            files = self.files,
+            qondor = qondor,
+            seutils = seutils,
+            )
+        return eval(expr, scope)
+
+    def run_evaluations(self, text):
+        """
+        Evaluates all instances of eval(...) in a string in the preprocessing scope
+        """
+        if not 'eval(' in text: return text
+        for i in range(len(text)):
+            if text[i:i+5] == 'eval(':
+                pass
+                # HIER VERDER
+                # balancing bracket vinden
+                opening_counts = 0
+                for j in range(i+1,len(text)):
+                    if text[j] == '(':
+                        opening_counts += 1
+                    elif text[j] == ')':
+                        if opening_counts == 0:
+                            break
+                        else:
+                            opening_counts -= 1
+                else:
+                    raise Exception
+            # HIER
+
 
     def preprocess_line(self, line):
         if   line.startswith('htcondor '):

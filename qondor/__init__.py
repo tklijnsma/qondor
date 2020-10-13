@@ -100,23 +100,23 @@ def get_master_preproc(python_file=None):
 
 def get_preproc():
     """
-    Gets the preprocessing set that this job is supposed to do.
+    Gets the preprocessing scope that this job is supposed to do.
     In local mode it just returns the first set.
-    If no sets are defined, it returns just the preprocessing.
+    If no scopes are defined, it returns just the preprocessing.
     """
     if BATCHMODE:
-        iset = int(os.environ['QONDORISET'])
-        for subset in get_master_preproc().sets():
-            if subset.subset_index == iset:
-                return subset
+        iscope = int(os.environ['QONDORISCOPE'])
+        for subscope in get_master_preproc().scopes():
+            if subscope.subscope_index == iscope:
+                return subscope
         else:
             raise RuntimeError(
-                'Looking for set {0} failed: no such set'
-                .format(iset)
+                'Looking for scope {0} failed: no such scope'
+                .format(iscope)
                 )
     else:
-        logger.info('Local mode - returning simply first set')
-        return next(get_master_preproc().sets())
+        logger.info('Local mode - returning simply first scope')
+        return next(get_master_preproc().scopes())
 
 def get_item():
     """
