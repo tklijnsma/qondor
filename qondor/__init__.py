@@ -24,7 +24,6 @@ TIMESTAMP_FMT = '%Y%m%d_%H%M%S'
 
 from . import schedd
 from .schedd import get_best_schedd, get_schedd_ads, wait, remove_jobs
-from .preprocess import Preprocessor, preprocessing
 from .submit import get_first_cluster
 from .cmssw import CMSSW
 from .cmssw_releases import get_arch
@@ -71,17 +70,18 @@ class Scope(argparse.Namespace):
         logger.info('Trying to load scope...')
         self.load_batchmode() if BATCHMODE else self.load_localmode()
 
-    def __getitem__(self, *args, tried_once=_TRIED_ONCE, **kwargs):
-        """
-        Hacked to call .load() once upon the first call of __getitem__
-        """
-        global _TRIED_ONCE
-        if not _TRIED_ONCE:
-            _TRIED_ONCE = True
-            self.load()
-        return super(Scope, self).__getitem__(*args, **kwargs)
+    # argparse.Namespace doesn't have a __getitem__ method
+    # def __getitem__(self, *args, **kwargs):
+    #     """
+    #     Hacked to call .load() once upon the first call of __getitem__
+    #     """
+    #     global _TRIED_ONCE
+    #     if not _TRIED_ONCE:
+    #         _TRIED_ONCE = True
+    #         self.load()
+    #     return super(Scope, self).__getitem__(*args, **kwargs)
 
-    def __getattribute__(self, *args, tried_once=_TRIED_ONCE, **kwargs):
+    def __getattribute__(self, *args, **kwargs):
         """
         Hacked to call .load() once upon the first call of __getattribute__
         """
@@ -95,8 +95,8 @@ scope = Scope()
 
 def load_seutils_cache():
     if BATCHMODE and scope.is_loaded:
-        seutils_cache_tarball = osp.basename(scope['transfer_files'].get('seutils-cache'))
-        if osp.isfile(seutils_cache_tarball): seutils.load_tarball_cache(tarball)
+        seutils_cache_tarball = osp.basename(scope.transfer_files['seutils-cache'])
+        if osp.isfile(seutils_cache_tarball): seutils.load_tarball_cache(seutils_cache_tarball)
 
 if BATCHMODE:
     load_seutils_cache()
@@ -109,9 +109,9 @@ if BATCHMODE and osp.isfile('rootcache.tar.gz'):
 # FNAL-specific things
 if os.environ.get('HOSTNAME', '').endswith('fnal.gov'):
     # Fix to be able to import htcondor python bindings
-    logger.warning('Detected FNAL: Modifying path to use system htcondor python bindings')
     import sys
     if sys.version_info.major < 3:
+        logger.warning('Detected FNAL: Modifying path to use system htcondor python bindings')
         sys.path.extend([
             '/usr/lib64/python2.6/site-packages',
             '/usr/lib64/python2.7/site-packages'
