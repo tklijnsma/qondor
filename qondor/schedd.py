@@ -300,7 +300,7 @@ def _change_submitobject_env_variable(submitobject, key, value):
     logger.debug('Replacing:\n  %s\n  by\n  %s', env, new_env)
     submitobject['environment'] = new_env
 
-def _htcondor_format_environment(env):
+def format_env_htcondor(env):
     """
     Takes a dict of key : value pairs that are both strings, and
     returns a string that is formatted so that htcondor can turn it
@@ -359,19 +359,15 @@ def _format_chunk(chunk):
         )
 
 def submit_pythonbindings(
-    submissiondict, submissiondir='.', schedd=None, dry=None,
-    items=None, rootfile_chunks=None, njobs=1, njobsmax=None
+    subdict, submissiondir='.', njobs=1, njobsmax=None,
     ):
-    """
-    Main interface to htcondor via the python bindings.
-    """
-    if dry is None: dry = qondor.DRYMODE # Inherit global drymode flag
+    dry = qondor.DRYMODE
     import htcondor
-    if schedd is None: schedd = get_best_schedd(renew=True)
-    sub = submissiondict.copy() # Create a copy to keep original dict unmodified
+    schedd = get_best_schedd(renew=True)
+    subdict = subdict.copy() # Create a copy to keep original dict unmodified
     # List to store all submitted job ads
     job_ads = []
-    cluster_id = [0]
+    cluster_id = [0] # Make it a 1-element list so that it's a 'pointer'
     n_queued = [0] # Make it a 1-element list so that it's a 'pointer'
     with qondor.utils.switchdir(submissiondir):
         # Make the transaction
@@ -390,33 +386,74 @@ def submit_pythonbindings(
                 if not(njobsmax is None) and n_queued[0] >= njobsmax:
                     return True
                 return False
-            # Choose specific submit behavior based on what extra keywords were passed
-            if items:
-                # Items logic: Turn any potential list into a ','-separated string,
-                # and set the environment variable QONDORITEM to that string.
-                sub['environment']['QONDORITEM'] = 'placeholder' # Placeholder
-                sub['environment'] = _htcondor_format_environment(sub['environment'])
-                submit_object = htcondor.Submit(sub)
-                for item in items:
-                    # Change the env variable in the submitobject
-                    _change_submitobject_env_variable(submit_object, 'QONDORITEM', _format_item(item))
-                    # Submit again and record cluster_id and job ads
-                    queue(submit_object)
-                    if should_quit_now(): break
-            elif rootfile_chunks:
-                sub['environment']['QONDORROOTFILECHUNK'] = 'placeholder'
-                sub['environment'] = _htcondor_format_environment(sub['environment'])
-                submit_object = htcondor.Submit(sub)                
-                for chunk in rootfile_chunks:
-                    _change_submitobject_env_variable(submit_object, 'QONDORROOTFILECHUNK', _format_chunk(chunk))
-                    queue(submit_object)
-                    if should_quit_now(): break
-            else:
-                sub['environment'] = _htcondor_format_environment(sub['environment'])
-                submit_object = htcondor.Submit(sub)
-                queue(submit_object, njobs if (njobsmax is None) else min(njobs, njobsmax))
+            # Actually submit
+            sub['environment'] = format_env_htcondor(sub['environment'])
+            submit_object = htcondor.Submit(subdict)
+            if not(njobsmax is None): njobs = min(njobs, njobsmax)
+            queue(submit_object, njobs)            
     logger.info('Submitted %s jobs to cluster %s', n_queued[0], cluster_id)
-    return cluster_id[0], n_queued[0] if dry else job_ads
+    return cluster_id[0], n_queued[0]
+
+
+# def submit_pythonbindings(
+#     submissiondict, submissiondir='.', schedd=None, dry=None,
+#     items=None, rootfile_chunks=None, njobs=1, njobsmax=None
+#     ):
+#     """
+#     Main interface to htcondor via the python bindings.
+#     """
+#     if dry is None: dry = qondor.DRYMODE # Inherit global drymode flag
+#     import htcondor
+#     if schedd is None: schedd = get_best_schedd(renew=True)
+#     sub = submissiondict.copy() # Create a copy to keep original dict unmodified
+#     # List to store all submitted job ads
+#     job_ads = []
+#     cluster_id = [0]
+#     n_queued = [0] # Make it a 1-element list so that it's a 'pointer'
+#     with qondor.utils.switchdir(submissiondir):
+#         # Make the transaction
+#         with _transaction(schedd) as transaction:
+#             # Helper function to actually submit a job to this transaction
+#             # Modifies the 'global' job_ads and cluster_id variables
+#             def queue(submit_object, njobs=1):
+#                 ads = []
+#                 n_queued[0] += njobs
+#                 if dry: return
+#                 cluster_id[0] = int(submit_object.queue(transaction, njobs, ads))
+#                 job_ads.extend(ads)
+#             # Helper function to test whether the needed amount of jobs to submit
+#             # is already reached
+#             def should_quit_now():
+#                 if not(njobsmax is None) and n_queued[0] >= njobsmax:
+#                     return True
+#                 return False
+#             # Choose specific submit behavior based on what extra keywords were passed
+#             if items:
+#                 # Items logic: Turn any potential list into a ','-separated string,
+#                 # and set the environment variable QONDORITEM to that string.
+#                 sub['environment']['QONDORITEM'] = 'placeholder' # Placeholder
+#                 sub['environment'] = format_env_htcondor(sub['environment'])
+#                 submit_object = htcondor.Submit(sub)
+#                 for item in items:
+#                     # Change the env variable in the submitobject
+#                     _change_submitobject_env_variable(submit_object, 'QONDORITEM', _format_item(item))
+#                     # Submit again and record cluster_id and job ads
+#                     queue(submit_object)
+#                     if should_quit_now(): break
+#             elif rootfile_chunks:
+#                 sub['environment']['QONDORROOTFILECHUNK'] = 'placeholder'
+#                 sub['environment'] = format_env_htcondor(sub['environment'])
+#                 submit_object = htcondor.Submit(sub)                
+#                 for chunk in rootfile_chunks:
+#                     _change_submitobject_env_variable(submit_object, 'QONDORROOTFILECHUNK', _format_chunk(chunk))
+#                     queue(submit_object)
+#                     if should_quit_now(): break
+#             else:
+#                 sub['environment'] = format_env_htcondor(sub['environment'])
+#                 submit_object = htcondor.Submit(sub)
+#                 queue(submit_object, njobs if (njobsmax is None) else min(njobs, njobsmax))
+#     logger.info('Submitted %s jobs to cluster %s', n_queued[0], cluster_id)
+#     return cluster_id[0], n_queued[0] if dry else job_ads
 
 def submit_condor_submit_commandline(
     submissiondict, submissiondir='.', dry=None,
@@ -451,20 +488,20 @@ def submit_condor_submit_commandline(
                 # and set the environment variable QONDORITEM to that string.
                 for item in items:
                     sub['environment']['QONDORITEM'] = _format_item(item)
-                    jdl.write('\nenvironment = {}\n'.format(_htcondor_format_environment(sub['environment'])))
+                    jdl.write('\nenvironment = {}\n'.format(format_env_htcondor(sub['environment'])))
                     jdl.write('queue\n')
                     n_queued += 1
                     if should_quit_now(): break
             elif rootfile_chunks:
                 for chunk in rootfile_chunks:
                     sub['environment']['QONDORROOTFILECHUNK'] = _format_chunk(chunk)
-                    jdl.write('\nenvironment = {}\n'.format(_htcondor_format_environment(sub['environment'])))
+                    jdl.write('\nenvironment = {}\n'.format(format_env_htcondor(sub['environment'])))
                     jdl.write('queue\n')
                     n_queued += 1
                     if should_quit_now(): break
             else:
                 if not(njobsmax is None): njobs = min(njobsmax, njobs)
-                jdl.write('environment = {}\n'.format(_htcondor_format_environment(sub['environment'])))
+                jdl.write('environment = {}\n'.format(format_env_htcondor(sub['environment'])))
                 jdl.write('queue {}\n'.format(njobs))
                 n_queued += njobs
         logger.debug('Queued %s jobs', n_queued)

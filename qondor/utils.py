@@ -227,8 +227,12 @@ def strip_comments(python_code):
     return '\n'.join(iter_strip_comments(python_code))
 
 class DummyFile(object):
+    def __init__(self):
+        self.text = ''
+
     def write(self, text):
         logger.debug('Writing: %s', text.replace('\n','\\n'))
+        self.text += text
 
 @contextmanager
 def openfile(*args, **kwargs):
@@ -312,7 +316,7 @@ def get_installation_path_of_module(module):
 
 def tarball_python_module(module, outdir=None, allow_uncommitted=True, dry=None, assume_pypi=True):
     """
-    Takes a python module or a path to a file of said module, and attempts to make an installable
+    Takes a python module or the name of a module, and attempts to make an installable
     pypi-style package tarball out of it.
     If assume_pypi is True, it will look for the pip installation directory of the package, and check
     whether there is a setup.py.
@@ -320,16 +324,22 @@ def tarball_python_module(module, outdir=None, allow_uncommitted=True, dry=None,
     only files that are tracked by git. Uncommitted changes are included, unless allowed_uncommitted 
     is set to False.
     """
+    import importlib
     if dry is None: dry = qondor.DRYMODE
     outdir = os.getcwd() if outdir is None else outdir
     outdir = osp.abspath(outdir)
 
-    # Input variable may be a path
+    # Input variable may be a module name
     if is_string(module):
-        # Treat the input variable as a path
-        path = module
-    else:
-        path = get_installation_path_of_module(module)
+        try:
+            module = importlib.import_module(module)
+        except ImportError:
+            logger.error(
+                'Cannot make tarball for package {}; package is not importable'
+                .format(module)
+                )
+            raise
+    path = get_installation_path_of_module(module)
 
     # Make sure path exists and is a directory
     if not osp.exists(path):
@@ -559,6 +569,11 @@ def dist_is_editable(dist):
     Is distribution an editable install?
     see: https://stackoverflow.com/a/42583363/9209944
     """
+    # If a string is passed, convert it to a module object
+    if is_string(dist):
+        import pkg_resources
+        dist = pkg_resources.get_distribution(dist)
+    # Check if the module's .egg-link is somewhere on the python path
     for path_item in sys.path:
         egg_link = osp.join(path_item, dist.project_name + '.egg-link')
         if osp.isfile(egg_link):

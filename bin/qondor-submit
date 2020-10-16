@@ -9,44 +9,23 @@ parser.add_argument('-c', '--cli', action='store_true', help='Force the job to b
 parser.add_argument('-n', '--njobsmax', type=int, help='Limit the number of jobs to be submitted to a number')
 
 # Parse once to find the index of the pythonfile argument
+# Every argument after the pythonfile argument is considered an argument for the runcode
 all_args, remainder = parser.parse_known_args()
 index_pythonfile = sys.argv.index(all_args.pythonfile)
-sysargs_for_submit = sys.argv[1:index_pythonfile+1]
-sysargs_for_python = sys.argv[index_pythonfile+1:]
+sysargs_for_submitcode = sys.argv[1:index_pythonfile+1]
+sysargs_for_runcode = sys.argv[index_pythonfile+1:]
 
 # Parse again with just the arguments before the pythonfile arg
 # This should crash if there are unknown arguments
-args = parser.parse_args(sysargs_for_submit)
+args = parser.parse_args(sysargs_for_submitcode)
 
 def main():
     if args.dry: qondor.drymode()
-    # Get the right submission function
-    submit = qondor.schedd.submit_condor_submit_commandline if args.cli else qondor.schedd.submit_pythonbindings
-    qondor.utils.check_proxy()
-    # Open a cache for any store element requests
-    total_n_submitted = 0
-    # Count the number of jobs still needed to submit (only to be done if args.njobsmax is passed)
-    njobs_left_to_submit = args.njobsmax if args.njobsmax else 1e9
-    with seutils.root.cache(cache_dir='.fcache/rootcache-{}'.format(uuid.uuid4())) as cache_dir:
-        submitter = qondor.Submitter(args.pythonfile, sysargs_for_python)
-        for sub, extra_options, preprocessor in submitter.iter_submissions():
-            if args.njobsmax: extra_options['njobsmax'] = njobs_left_to_submit
-            # Maybe just .endwith('.uscms.org') ? Not sure if that would break other sites
-            if os.uname()[1] == 'login.uscms.org' or os.uname()[1] == 'login-el7.uscms.org':
-                qondor.logger.warning('Detected CMS Connect; loading specific settings')
-                qondor.submit.cmsconnect_settings(sub, preprocessor=preprocessor, cli=args.cli)
-            cluster_id, n_submitted = submit(sub, submissiondir=submitter.rundir, **extra_options)
-            # Convert to int if necessary - only submitting via python bindngs
-            # in non-dry mode will return a list of classads rather than an integer
-            try:
-                n_submitted = int(n_submitted)
-            except TypeError:
-                n_submitted = len(n_submitted)
-            total_n_submitted += n_submitted
-            njobs_left_to_submit -= n_submitted
-            if args.njobsmax and njobs_left_to_submit <= 0:
-                break
-    qondor.logger.info('Submitted %s jobs in total', total_n_submitted)
-
+    if not args.dry: seutils.use_cache()
+    qondor.submit.submit_python_job_file(
+        args.pythonfile,
+        cli=args.cli, njobsmax=args.njobsmax, run_args=sysargs_for_runcode
+        )
+    
 if __name__ == '__main__':
     main()
