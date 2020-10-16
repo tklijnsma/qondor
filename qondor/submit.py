@@ -83,12 +83,12 @@ def submit_python_job_file(filename, cli=False, njobsmax=None, run_args=None):
     session.submit(cli, njobsmax=njobsmax)
 
 def _exec_in_scope(code, scope):
-    if sys.version_info.major < 3:
-        if not code.endswith('\n'): code += '\n'
-        logger.warning('Python 2 style')
-        exec code in scope
-    else:
-        exec(code, exec_scope)
+    # if sys.version_info.major < 3:
+    #     if not code.endswith('\n'): code += '\n'
+    #     logger.warning('Python 2 style')
+    #     exec code in scope
+    # else:
+    exec(code, scope)
 
 class StopProcessing(Exception):
     """
@@ -202,6 +202,7 @@ class Session(object):
         self._i_seutils_tarball = 0
         self.submittables = []
         self._njobs_submitted = 0
+        self.htcondor = get_default_sub(self.submission_time)
 
     def dump_seutils_cache(self):
         """
@@ -228,10 +229,15 @@ class Session(object):
                 # Add the tarball as input file for this cluster
                 cluster.transfer_files['_packagetarball_{}'.format(package)] = self._created_python_module_tarballs[package]
 
-    def make_sub(self, cluster):
-        sub = get_default_sub(self.submission_time)
+    def make_sub(self, cluster, cli):
+        # Base off of global settings only for python-binding mode
+        # For the condor_submit cli method, it's better to just write the global keys once at the top of the file
+        # Little unsafe, if you modiy these 'global' settings in one job they propegate to all the next ones,
+        # but otherwise submission of many jobs becomes very slow
+        sub = {} if cli else self.htcondor.copy()
         sub['executable'] =  osp.basename(cluster.sh_entrypoint_filename)
         sub['+QondorRundir']  =  '"' + self.rundir + '"'
+        sub['environment'] = {}
         sub['environment']['QONDORICLUSTER'] = str(cluster.i_cluster)
         sub['environment'].update(cluster.env)
         # Overwrite htcondor keys defined in the preprocessing
@@ -250,7 +256,6 @@ class Session(object):
             logger.debug('Not adding submission for cluster %s - reached njobsmax %s', cluster.i_cluster, njobsmax)
             return
         self._njobs_submitted += njobs
-        qondor.utils.check_proxy()
         qondor.utils.create_directory(self.rundir)
         cluster.rundir = self.rundir
         # Possibly create tarballs out of required python packages
@@ -262,7 +267,7 @@ class Session(object):
         cluster.sh_entrypoint_to_file()
         cluster.scope_to_file()
         # Compile the submission dict
-        sub = self.make_sub(cluster)
+        sub = self.make_sub(cluster, cli)
         # Potentially process cmsconnect specific settings
         blacklist = sub.pop('blacklist', None)
         whitelist = sub.pop('whitelist', None)
@@ -273,6 +278,7 @@ class Session(object):
         self.submittables.append((sub, njobs))
 
     def submit_pythonbindings(self, njobsmax=None):
+        qondor.utils.check_proxy()
         if not self.submittables: return
         import htcondor
         if njobsmax is None: njobsmax = 1e7
@@ -286,7 +292,7 @@ class Session(object):
             with qondor.schedd._transaction(schedd) as transaction:
                 submit_object = htcondor.Submit()
                 for sub_orig, njobs in self.submittables:
-                    sub = sub_orig.copy() # Keep original dict intact
+                    sub = sub_orig.copy() # Keep original dict intact? Global settings already contained
                     sub['environment'] = qondor.schedd.format_env_htcondor(sub['environment'])
                     njobs = min(njobs, n_jobs_todo)
                     n_jobs_todo -= njobs
@@ -307,6 +313,7 @@ class Session(object):
         self.submittables = []
 
     def submit_cli(self, njobsmax=None):
+        qondor.utils.check_proxy()
         if not self.submittables: return
         if njobsmax is None: njobsmax = 1e7
         n_jobs_summed = sum([ njobs for _, njobs in self.submittables ])
@@ -320,18 +327,29 @@ class Session(object):
             self.rundir,
             'qondor_{}-{}.jdl'.format(get_cluster_nr(self.submittables[0][0]), get_cluster_nr(self.submittables[-1][0]))
             )
+        jdl_contents = []
+        # First write 'global' jdl settings            
+        for key in self.htcondor.keys():
+            val = self.htcondor[key]
+            if key.lower() == 'environment': val = qondor.schedd.format_env_htcondor(val)
+            jdl_contents.append('{} = {}'.format(key, val))
+        jdl_contents.append('')
+        # Then write the settings per job
+        for sub, njobs in self.submittables:
+            njobs = min(njobs, n_jobs_todo)
+            n_jobs_todo -= njobs
+            jdl_contents.append('# Cluster {}'.format(sub['environment']['QONDORICLUSTER']))
+            # Dump the submission to a jdl file
+            for key in sub.keys():
+                val = sub[key]
+                if key.lower() == 'environment': val = qondor.schedd.format_env_htcondor(val)
+                jdl_contents.append('{} = {}'.format(key, val))
+            jdl_contents.append('queue {}\n'.format(njobs))
+        # Dump to file
+        jdl_contents = '\n'.join(jdl_contents)
         with qondor.utils.openfile(jdl_file, 'w') as jdl:
-            for sub, njobs in self.submittables:
-                njobs = min(njobs, n_jobs_todo)
-                n_jobs_todo -= njobs
-                jdl.write('# Cluster {}\n'.format(sub['environment']['QONDORICLUSTER']))
-                # Dump the submission to a jdl file
-                for key in sub.keys():
-                    val = sub[key]
-                    if key.lower() == 'environment': val = qondor.schedd.format_env_htcondor(val)
-                    jdl.write('{} = {}\n'.format(key, val))
-                jdl.write('queue {}\n\n'.format(njobs))
-            if qondor.DRYMODE: logger.info('Compiled %s:\n%s', jdl_file, jdl.text)
+            jdl.write(jdl_contents)
+        logger.info('Compiled %s:\n%s', jdl_file, jdl_contents)
         # Run the actual submit command
         with qondor.utils.switchdir(self.rundir):
             output = qondor.utils.run_command(['condor_submit', osp.basename(jdl_file)])

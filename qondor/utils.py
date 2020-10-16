@@ -34,7 +34,10 @@ def _create_directory_no_checks(dirname, dry=None):
     :type dry: bool, optional
     """
     if dry is None: dry = qondor.DRYMODE
-    logger.warning('Creating directory %s', dirname)
+    logger.warning(
+        'Creating directory %s%s',
+        dirname, ' (possible duplicate log in drymode)' if qondor.DRYMODE else ''
+        )
     if not dry: os.makedirs(dirname)
 
 def create_directory(dirname, renew=False, must_not_exist=False, dry=None):
@@ -228,11 +231,13 @@ def strip_comments(python_code):
 
 class DummyFile(object):
     def __init__(self):
-        self.text = ''
+        # self.text = ''
+        pass
 
     def write(self, text):
-        logger.debug('Writing: %s', text.replace('\n','\\n'))
-        self.text += text
+        # logger.debug('Writing: %s', text.replace('\n','\\n'))
+        # self.text += text
+        pass
 
 @contextmanager
 def openfile(*args, **kwargs):

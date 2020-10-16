@@ -31,7 +31,7 @@ def setup_logger(name='qondor', fmt=None):
         handler = logging.StreamHandler()
         handler.setFormatter(fmt)
         logger = logging.getLogger(name)
-        logger.setLevel(logging.DEBUG)
+        logger.setLevel(logging.INFO)
         logger.addHandler(handler)
     return logger
 
