@@ -73,6 +73,8 @@ def submit_python_job_file(filename, cli=False, njobsmax=None, run_args=None):
         'submit' : submit_fn,
         'submit_now' : submit_now_fn,
         'runcode' : runcode,
+        'run_args' : run_args,
+        'cli' : cli,
         'njobsmax' : njobsmax
         }
     logger.warning('Running submission code now')
