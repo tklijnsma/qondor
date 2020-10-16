@@ -41,7 +41,6 @@ class Scope(argparse.Namespace):
     Like an argparse.Namespace object, but when first called loads the scope either
     from a .json file or from the python file on top of the stack (first cluster).
     """
-
     def __init__(self, *args, **kwargs):
         super(Scope, self).__init__(*args, **kwargs)
         self.is_loaded = False

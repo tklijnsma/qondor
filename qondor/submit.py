@@ -276,10 +276,9 @@ class Session(object):
         if len(transfer_files) > 0:
             sub['transfer_input_files'] = ','.join(transfer_files)
         sub = update_sub(sub, cluster.htcondor)
-        if not(cli):
-            # For the python-binding submit method, plugin the global and cmsconnect settings in now
-            self.fix_cmsconnect_specific_settings_once(cli=False)
-            sub = update_sub(self.htcondor_settings, sub)
+        # Plugin the global and cmsconnect settings in now
+        self.fix_cmsconnect_specific_settings_once(cli)
+        sub = update_sub(self.htcondor_settings, sub)
         logger.info('Prepared submission dict for cluster %s:\n%s', cluster.i_cluster, pprint.pformat(sub))
         return sub
 
@@ -355,14 +354,7 @@ class Session(object):
             'qondor_{}-{}.jdl'.format(get_cluster_nr(self.submittables[0][0]), get_cluster_nr(self.submittables[-1][0]))
             )
         jdl_contents = []
-        # First write 'global' jdl settings
-        self.fix_cmsconnect_specific_settings_once(cli=True)
-        for key in self.htcondor_settings.keys():
-            val = self.htcondor_settings[key]
-            if key.lower() == 'environment': val = qondor.schedd.format_env_htcondor(val)
-            jdl_contents.append('{} = {}'.format(key, val))
-        jdl_contents.append('')
-        # Then write the settings per job
+        # Write the settings per job
         for sub, njobs in self.submittables:
             njobs = min(njobs, n_jobs_todo)
             n_jobs_todo -= njobs
