@@ -404,30 +404,28 @@ def tarball_python_module(module, outdir=None, allow_uncommitted=True, dry=None,
     return outfile
 
 
-def extract_tarball(tarball, outdir='.', dry=None):
+def extract_tarball(tarball, outdir='.', verbose=False):
     """
     Extracts a tarball to outdir
     """
-    if dry is None: dry = qondor.DRYMODE
     tarball = osp.abspath(tarball)
     outdir = osp.abspath(outdir)
+    create_directory(outdir)
     logger.warning(
         'Extracting {0} ==> {1}'
         .format(tarball, outdir)
         )
     cmd = [
-        'tar', '-xvf', tarball,
+        'tar', '-x{}f'.format('v' if verbose else ''), tarball,
         '-C', outdir
         ]
-    run_command(cmd, dry=dry)
+    run_command(cmd)
 
-
-def extract_tarball_cmssw(tarball, outdir='.', dry=None):
+def extract_tarball_cmssw(tarball, outdir='.'):
     """
     Extracts a tarball to outdir, and returns the extracted CMSSW dir
     """
-    if dry is None: dry = qondor.DRYMODE
-    extract_tarball(tarball, outdir, dry)
+    extract_tarball(tarball, outdir)
     # return the CMSSW directory
     if dry: return 'CMSSW_dry'
     # Get the extracted directory from the tarball:
