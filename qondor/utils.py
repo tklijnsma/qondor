@@ -427,7 +427,7 @@ def extract_tarball_cmssw(tarball, outdir='.'):
     """
     extract_tarball(tarball, outdir)
     # return the CMSSW directory
-    if dry: return 'CMSSW_dry'
+    if qondor.DRYMODE: return 'CMSSW_dry'
     # Get the extracted directory from the tarball:
     import tarfile
     for name in tarfile.open(tarball).getnames():

@@ -156,9 +156,11 @@ def init_cmssw(tarball_key='cmssw_tarball', scram_arch=None, outdir=None):
     elif seutils.has_protocol(tarball_key):
         # A path to a tarball on a storage element was given
         cmssw_tarball = tarball_key
-    else:
+    elif tarball_key in scope:
         # A key to a file in the preprocessing was given
-        cmssw_tarball = qondor.scope[tarball_key]
+        cmssw_tarball = scope[tarball_key]
+    else:
+        raise Exception('Cannot load tarball {0}'.format(tarball_key))
     cmssw = CMSSW.from_tarball(cmssw_tarball, scram_arch, outdir=outdir)
     return cmssw
 
