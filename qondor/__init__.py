@@ -35,6 +35,36 @@ import seutils
 # Decisions at import-time depending on whether this is a job or
 # an import on an interactive node
 
+# object_hook method to load regular strings rather than unicode strings
+# when doing json.load(s)
+# See https://stackoverflow.com/a/33571117/9209944
+def _json_load_byteified(file_handle):
+    return _byteify(
+        json.load(file_handle, object_hook=_byteify),
+        ignore_dicts=True
+        )
+def _json_loads_byteified(json_text):
+    return _byteify(
+        json.loads(json_text, object_hook=_byteify),
+        ignore_dicts=True
+        )
+def _byteify(data, ignore_dicts=False):
+    # if this is a unicode string, return its string representation
+    if isinstance(data, unicode):
+        return data.encode('utf-8')
+    # if this is a list of values, return list of byteified values
+    if isinstance(data, list):
+        return [ _byteify(item, ignore_dicts=True) for item in data ]
+    # if this is a dictionary, return dictionary of byteified keys and values
+    # but only if we haven't already byteified it
+    if isinstance(data, dict) and not ignore_dicts:
+        return {
+            _byteify(key, ignore_dicts=True): _byteify(value, ignore_dicts=True)
+            for key, value in data.items()
+        }
+    # if it's anything else, return it in its original form
+    return data
+
 _TRIED_ONCE = False
 class Scope(argparse.Namespace):
     """
@@ -50,7 +80,8 @@ class Scope(argparse.Namespace):
             scope_file = os.environ['QONDORSCOPEFILE']
             if osp.isfile(scope_file):
                 with open(scope_file, 'r') as f:
-                    d = json.load(f)
+                    # d = json.load(f)
+                    d = _json_load_byteified(f)
                     scope.__dict__.update(d)
                 logger.info('Loaded following scope from %s:\n%s', scope_file, pprint.pformat(scope))
                 self.is_loaded = True
