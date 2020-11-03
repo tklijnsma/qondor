@@ -34,11 +34,9 @@ def _create_directory_no_checks(dirname, dry=None):
     :type dry: bool, optional
     """
     if dry is None: dry = qondor.DRYMODE
-    logger.warning(
-        'Creating directory %s%s',
-        dirname, ' (possible duplicate log in drymode)' if qondor.DRYMODE else ''
-        )
-    if not dry: os.makedirs(dirname)
+    if not dry:
+        logger.warning('Creating directory %s',dirname)
+        os.makedirs(dirname)
 
 def create_directory(dirname, renew=False, must_not_exist=False, dry=None):
     """
@@ -65,7 +63,7 @@ def create_directory(dirname, renew=False, must_not_exist=False, dry=None):
             logger.warning('Deleting directory %s', dirname)
             if not dry: shutil.rmtree(dirname)
         else:
-            logger.warning('%s already exists, not recreating', dirname)
+            logger.debug('%s already exists, not recreating', dirname)
             return
     _create_directory_no_checks(dirname, dry=dry)
 
@@ -107,10 +105,10 @@ def run_command(cmd, env=None, dry=None, shell=False):
     logger.warning('Issuing command: {0}'.format(' '.join(cmd) if not is_string(cmd) else cmd))
     if dry is None: dry = qondor.DRYMODE
     if dry: return
-
     if shell and not is_string(cmd):
         cmd = ' '.join(cmd)
-
+    if env == 'clean':
+        env = get_clean_env()
     process = subprocess.Popen(
         cmd,
         stdout=subprocess.PIPE,

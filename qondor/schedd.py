@@ -213,20 +213,81 @@ def get_schedds(renew=False):
     return _get_scheddman(renew).get_all_schedds()
 
 
+# _____________________________________________________________________
 # Some basic condor utilities
 
-def get_jobs(cluster_id, proc_id=None):
-    requirements = 'ClusterId=={0}'.format(cluster_id)
-    if not(proc_id is None): requirements += ' && ProcId == {0}'.format(proc_id)
+_status_str_to_int = {
+    'U' : 0, # Unexpanded
+    'I' : 1, # Idle
+    'R' : 2, # Running
+    'X' : 3, # Removed
+    'C' : 4, # Completed
+    'H' : 5, # Held
+    'E' : 6, # Submission_err
+    }
+
+_status_int_to_str = {
+    0 : 'Unexpanded',
+    1 : 'Idle',
+    2 : 'Running',
+    3 : 'Removed',
+    4 : 'Completed',
+    5 : 'Held',
+    6 : 'Submission_err',    
+    }
+
+class QueuedJob(object):
+    """
+    Simple container for a job that is currently in the queue of htcondor.
+    Can be initialized both by the python-bindings or the condor_q command line
+    """
+    @classmethod
+    def from_ad(cls, ad):
+        return cls(ad['ClusterId'], ad['ProcId'], ad['JobStatus'], user=ad['Owner'], rundir=ad['Iwd'])
+
+    def __init__(self, cluster_id, proc_id, status, user=None, sh_base=None, rundir=None):
+        self.cluster_id = cluster_id
+        self.proc_id = proc_id
+        self.status = status
+        self.user = user
+        self.sh_base = sh_base
+        self.rundir = rundir
+
+    def __repr__(self):
+        return super(QueuedJob, self).__repr__().replace(
+            'object',
+            'object {}.{} {}'.format(self.cluster_id, self.proc_id, self.status_str())
+            )
+
+    def status_str(self):
+        return _status_int_to_str[self.status]
+
+def sort_jobs(list_of_jobs):
+    list_of_jobs.sort(key = lambda job: (job.cluster_id, job.proc_id))
+
+def get_jobs_bindings(cluster_id=None, proc_id=None, user='auto'):
+    requirements = []
+    if cluster_id:
+        requirements.append('ClusterId=={0}'.format(cluster_id))
+    if proc_id:
+        requirements.append('ProcId == {0}'.format(proc_id))
+    if user == 'auto':
+        import getpass
+        user = getpass.getuser()
+    if user:
+        requirements.append('Owner == "{0}"'.format(user))
+    requirements = ' && '.join(requirements)
     classads = []
     logger.debug('requirements = %s', requirements)
     for schedd in get_schedds():
         classads.extend(list(schedd.xquery(
             requirements = requirements,
-            projection = ['ProcId', 'JobStatus']
+            projection = ['ClusterId', 'ProcId', 'JobStatus', 'Iwd', 'Owner']
             )))
     logger.info('Query returned %s', classads)
-    return classads
+    jobs = [QueuedJob.from_ad(ad) for ad in classads]
+    sort_jobs(jobs)
+    return jobs
 
 def remove_jobs(cluster_id):
     import htcondor
@@ -248,6 +309,36 @@ def wait(cluster_id, proc_id=None, n_sleep=10):
                 )
             logger.info('Sleeping for %s seconds before checking again', n_sleep)
             sleep(n_sleep)
+
+def get_jobs_cli(cluster_id=None, proc_id=None):
+    output = qondor.utils.run_command('condor_q', env='clean', shell=True)
+    jobs = []
+    for line in output:
+        line = line.strip()
+        if not(len(line)): continue
+        components = line.split()
+        if not re.match(r'\d+\.\d+', components[0]): continue
+        this_cluster_id, this_proc_id = map(int, components[0].split('.'))
+        if not(cluster_id is None) and this_cluster_id != cluster_id:
+            continue
+        if not(proc_id is None) and this_proc_id != proc_id:
+            continue
+        status_str = components[5]
+        status = _status_str_to_int.get(status_str, -1)
+        sh_base = components[-1]
+        user = components[1]
+        jobs.append(QueuedJob(this_cluster_id, this_proc_id, status, user=user, sh_base=sh_base))        
+    sort_jobs(jobs)
+    return jobs
+
+def get_jobs(*args, **kwargs):
+    method = kwargs.pop('method', None)
+    if method is None:
+        try:
+            import htcondor
+            return get_jobs_bindings(*args, **kwargs)
+        except ImportError:
+            return get_jobs_cli(*args, **kwargs)
 
 # _____________________________________________________________________
 # Submission utils

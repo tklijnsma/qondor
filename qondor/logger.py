@@ -1,16 +1,5 @@
 import logging
-
-COLORS = {
-    'yellow' : '\033[33m',
-    'red'    : '\033[31m',
-    }
-RESET = '\033[0m'
-
-def colored(text, color=None):
-    if not color is None:
-        text = COLORS[color] + text + RESET
-    return text
-
+import qondor
 
 def setup_logger(name='qondor', fmt=None):
     if name in logging.Logger.manager.loggerDict:
@@ -20,7 +9,7 @@ def setup_logger(name='qondor', fmt=None):
         if fmt is None:
             fmt = logging.Formatter(
                 fmt = (
-                    colored(
+                    qondor.colored(
                         '[{0}|%(levelname)8s|%(asctime)s|%(module)s]:'.format(name),
                         'yellow'
                         )
@@ -40,7 +29,7 @@ def setup_subprocess_logger():
     return setup_logger(
         'subprocess',
         fmt = logging.Formatter(
-            fmt = colored('[%(asctime)s]:', 'red') + ' %(message)s',
+            fmt = qondor.colored('[%(asctime)s]:', 'red') + ' %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S'
             )
         )

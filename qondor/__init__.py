@@ -1,5 +1,18 @@
 # -*- coding: utf-8 -*-
 import os, os.path as osp, uuid, logging, argparse, pprint, json
+
+COLORS = {
+    'yellow' : '\033[33m',
+    'red'    : '\033[31m',
+    'green'    : '\033[32m',
+    }
+RESET = '\033[0m'
+
+def colored(text, color=None):
+    if not color is None:
+        text = COLORS[color] + text + RESET
+    return text
+
 from .logger import setup_logger, setup_subprocess_logger
 logger = setup_logger()
 subprocess_logger = setup_subprocess_logger()
@@ -10,26 +23,36 @@ def debug(flag=True):
     else:
         logger.setLevel(logging.INFO)
 
+# Path to non-python-package files
 INCLUDE_DIR = osp.join(osp.abspath(osp.dirname(__file__)), 'include')
 
-from . import utils
-
+# Check if qondor is imported in batch mode
 BATCHMODE = False
 if 'QONDOR_BATCHMODE' in os.environ:
     BATCHMODE = True
+
+# Global variable to check if the htcondor bindings are installed
+try:
+    import htcondor
+    logger.info('The python bindings for htcondor are imported')
+    BINDINGS_INSTALLED = True
+except ImportError:
+    logger.info('The python bindings for htcondor do not seem to be installed')
+    BINDINGS_INSTALLED = False
 
 COLLECTOR_NODES = None
 DEFAULT_MGM = None
 TIMESTAMP_FMT = '%Y%m%d_%H%M%S'
 
+from . import utils
 from . import schedd
 from .schedd import get_best_schedd, get_schedd_ads, wait, remove_jobs
 from .submit import get_first_cluster
 from .cmssw import CMSSW
 from .cmssw_releases import get_arch
+from . import resubmit
 from . import svj
 import seutils
-
 
 # ___________________________________________________
 # Decisions at import-time depending on whether this is a job or
@@ -49,9 +72,13 @@ def _json_loads_byteified(json_text):
         ignore_dicts=True
         )
 def _byteify(data, ignore_dicts=False):
-    # if this is a unicode string, return its string representation
-    if isinstance(data, unicode):
-        return data.encode('utf-8')
+    try:
+        # if this is a unicode string, return its string representation
+        # Only for python 2, NameError in python 3
+        if isinstance(data, unicode):
+            return data.encode('utf-8')
+    except NameError:
+        pass
     # if this is a list of values, return list of byteified values
     if isinstance(data, list):
         return [ _byteify(item, ignore_dicts=True) for item in data ]
@@ -124,7 +151,7 @@ class Scope(argparse.Namespace):
 scope = Scope()
 
 def load_seutils_cache():
-    if BATCHMODE and scope.is_loaded:
+    if BATCHMODE and scope.is_loaded and 'seutils-cache' in scope.transfer_files:
         seutils_cache_tarball = osp.basename(scope.transfer_files['seutils-cache'])
         if osp.isfile(seutils_cache_tarball): seutils.load_tarball_cache(seutils_cache_tarball)
 
@@ -164,6 +191,11 @@ def drymode(flag=True):
 
 def get_proc_id():
     if BATCHMODE:
+        if 'QONDOR_PROC_ID_RESUBMISSION' in os.environ:
+            # This is a resubmission. Return the i_proc for the resubmission instead
+            i_proc = int(os.environ['QONDOR_PROC_ID_RESUBMISSION'])
+            logger.warning('This is a resubmission - returning i_proc = %s', i_proc)
+            return i_proc
         return int(os.environ['CONDOR_PROCESS_ID'])
     else:
         logger.info('Local mode - return proc_id 0')

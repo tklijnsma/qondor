@@ -8,6 +8,9 @@ import seutils
 logger = logging.getLogger('qondor')
 
 
+# _____________________________________________________________________
+# Interface to translate python code (typically in a file) into job submissions
+
 def split_runcode_submitcode(lines):
     """
     Splits a list of lines into two strings, the python to run in the job
@@ -18,6 +21,7 @@ def split_runcode_submitcode(lines):
     is_runcode_mode = True
     is_submitcode_mode = False
     for line in lines:
+        line = line.strip('\n')
         if line.startswith('"""# submit'):
             if is_submitcode_mode:
                 raise Exception(
@@ -52,12 +56,11 @@ def split_runcode_submitcode_file(filename):
     with open(filename, 'r') as f:
         return split_runcode_submitcode(f.readlines())
 
-def _exec_in_scope(code, scope):
-    # if sys.version_info.major < 3:
-    #     if not code.endswith('\n'): code += '\n'
-    #     logger.warning('Python 2 style')
-    #     exec code in scope
-    # else:
+def exec_wrapper(code, scope):
+    """
+    Python 2 has problems with function definitions in the same scope as the exec.
+    Solution: Run exec in a subscope with this wrapper function.
+    """
     exec(code, scope)
 
 class StopProcessing(Exception):
@@ -80,11 +83,12 @@ def submit_python_job_file(filename, cli=False, njobsmax=None, run_args=None, re
     def submit_fn(*args, **kwargs):
         kwargs.setdefault('session', session)
         kwargs.setdefault('run_args', run_args)
+        njobs = kwargs.get('njobs', 1)
         cluster = Cluster(runcode, *args, **kwargs)
         if return_first_cluster:
             _first_cluster_ptr[0] = cluster
             raise StopProcessing
-        session.add_submission(cluster, cli=cli, njobsmax=njobsmax)
+        session.add_submission(cluster, cli=cli, njobsmax=njobsmax, njobs=njobs)
     def submit_now_fn():
         session.submit(cli, njobsmax=njobsmax)
     exec_scope = {
@@ -102,7 +106,7 @@ def submit_python_job_file(filename, cli=False, njobsmax=None, run_args=None, re
     logger.warning('Running submission code now')
     if return_first_cluster:
         try:
-            _exec_in_scope(submitcode, exec_scope)
+            exec_wrapper(submitcode, exec_scope)
         except StopProcessing:
             pass
         cluster = _first_cluster_ptr[0]
@@ -110,7 +114,7 @@ def submit_python_job_file(filename, cli=False, njobsmax=None, run_args=None, re
             raise Exception('No cluster was submitted in the submit code')
         return cluster
     else:
-        _exec_in_scope(submitcode, exec_scope)
+        exec_wrapper(submitcode, exec_scope)
         # Do a submit_now call in case it wasn't done yet (if submit_now was called in the submit code this is a no-op)
         session.submit(cli, njobsmax=njobsmax)
 
@@ -123,6 +127,11 @@ def get_first_cluster(filename):
     return submit_python_job_file(filename, return_first_cluster=True)
 
 
+# _____________________________________________________________________
+# Submission interface:
+# Deals with building submission dicts and submitting them to htcondor
+
+# Run environments: Currently just two options (sl6 and sl7)
 RUN_ENVS = {
     'sl7-py27' : [
         'export pipdir="/cvmfs/sft.cern.ch/lcg/releases/pip/19.0.3-06476/x86_64-centos7-gcc7-opt"',
@@ -131,6 +140,7 @@ RUN_ENVS = {
         'source /cvmfs/sft.cern.ch/lcg/releases/LCG_95/ROOT/6.16.00/x86_64-centos7-gcc7-opt/ROOT-env.sh',
         'export PATH="${pipdir}/bin:${PATH}"',
         'export PYTHONPATH="${pipdir}/lib/python2.7/site-packages/:${PYTHONPATH}"',
+        'pip(){ ${pipdir}/bin/pip "$@"; }  # To avoid any local pip installations',
         ],
     'sl6-py27' : [
         'export pipdir="/cvmfs/sft.cern.ch/lcg/releases/pip/19.0.3-06476/x86_64-slc6-gcc7-opt"',
@@ -139,9 +149,9 @@ RUN_ENVS = {
         'source /cvmfs/sft.cern.ch/lcg/releases/LCG_95/ROOT/6.16.00/x86_64-slc6-gcc7-opt/ROOT-env.sh',
         'export PATH="${pipdir}/bin:${PATH}"',
         'export PYTHONPATH="${pipdir}/lib/python2.7/site-packages/:${PYTHONPATH}"',
+        'pip(){ ${pipdir}/bin/pip "$@"; }  # To avoid any local pip installations',
         ],
     }
-
 
 def get_default_sub(submission_time=None):
     """
@@ -214,6 +224,8 @@ class Session(object):
         self.htcondor_settings = get_default_sub(self.submission_time)
         self.htcondor_settings['+QondorRundir']  =  '"' + self.rundir + '"'
         self._fixed_cmsconnect_specific_settings = False
+        # Storage for submitted jobs
+        self.submitted = []
 
     def htcondor(self, key, value):
         """
@@ -259,29 +271,6 @@ class Session(object):
                 # Add the tarball as input file for this cluster
                 cluster.transfer_files['_packagetarball_{}'.format(package)] = self._created_python_module_tarballs[package]
 
-    def make_sub(self, cluster, cli):
-        # Base off of global settings only for python-binding mode
-        # For the condor_submit cli method, it's better to just write the global keys once at the top of the file
-        # Little unsafe, if you modiy these 'global' settings in one job they propegate to all the next ones,
-        # but otherwise submission of many jobs becomes very slow
-        sub = {}
-        sub['executable'] =  osp.basename(cluster.sh_entrypoint_filename)
-        sub['environment'] = {}
-        sub['environment']['QONDORICLUSTER'] = str(cluster.i_cluster)
-        sub['environment'].update(cluster.env)
-        # Overwrite htcondor keys defined in the preprocessing
-        sub.update(cluster.htcondor)
-        # Flatten files into a string, excluding files on storage elements
-        transfer_files = self.transfer_files + [f for f in cluster.transfer_files.values() if not seutils.has_protocol(f)]
-        if len(transfer_files) > 0:
-            sub['transfer_input_files'] = ','.join(transfer_files)
-        sub = update_sub(sub, cluster.htcondor)
-        # Plugin the global and cmsconnect settings in now
-        self.fix_cmsconnect_specific_settings_once(cli)
-        sub = update_sub(self.htcondor_settings, sub)
-        logger.info('Prepared submission dict for cluster %s:\n%s', cluster.i_cluster, pprint.pformat(sub))
-        return sub
-
     def add_submission(self, cluster, cli=True, njobs=1, njobsmax=None):
         if njobsmax: njobs = min(njobs, njobsmax - self._njobs_submitted)
         if njobsmax and njobs == 0:
@@ -299,7 +288,31 @@ class Session(object):
         cluster.sh_entrypoint_to_file()
         cluster.scope_to_file()
         # Compile the submission dict
-        sub = self.make_sub(cluster, cli)
+        # Base off of global settings only for python-binding mode
+        # For the condor_submit cli method, it's better to just write the global keys once at the top of the file
+        # Little unsafe, if you modiy these 'global' settings in one job they propegate to all the next ones,
+        # but otherwise submission of many jobs becomes very slow
+        sub = {
+            'output' : 'out_{}_$(Cluster)_$(Process).txt'.format(cluster.name),
+            'error' : 'err_{}_$(Cluster)_$(Process).txt'.format(cluster.name),
+            'log' : 'log_{}_$(Cluster)_$(Process).txt'.format(cluster.name),
+            }
+        sub['executable'] =  osp.abspath(cluster.sh_entrypoint_filename)
+        sub['environment'] = {}
+        sub['environment']['QONDORICLUSTER'] = str(cluster.i_cluster)
+        sub['environment']['QONDORCLUSTERNAME'] = str(cluster.name)
+        sub['environment'].update(cluster.env)
+        # Overwrite htcondor keys defined in the preprocessing
+        sub.update(cluster.htcondor)
+        # Flatten files into a string, excluding files on storage elements
+        transfer_files = self.transfer_files + [f for f in cluster.transfer_files.values() if not seutils.has_protocol(f)]
+        if len(transfer_files) > 0:
+            sub['transfer_input_files'] = ','.join(transfer_files)
+        sub = update_sub(sub, cluster.htcondor)
+        # Plugin the global and cmsconnect settings in now
+        self.fix_cmsconnect_specific_settings_once(cli)
+        sub = update_sub(self.htcondor_settings, sub)
+        logger.info('Prepared submission dict for cluster %s:\n%s', cluster.i_cluster, pprint.pformat(sub))
         # Add it to the submittables
         self.submittables.append((sub, njobs))
 
@@ -328,15 +341,18 @@ class Session(object):
                     new_ads = []
                     cluster_id = int(submit_object.queue(transaction, njobs, new_ads)) if not qondor.DRYMODE else 0
                     logger.info(
-                        'Submitted %s jobs for i_cluster %s to htcondor cluster %s',
+                        'Submitted %s jobs for i_cluster %s (%s) to htcondor cluster %s',
                         len(new_ads) if not qondor.DRYMODE else njobs,
-                        sub_orig['environment']['QONDORICLUSTER'], cluster_id
+                        sub_orig['environment']['QONDORICLUSTER'],
+                        sub_orig['environment']['QONDORCLUSTERNAME'],
+                        cluster_id
                         )
                     ads.extend(new_ads)
+                    self.submitted.append((
+                        sub_orig, cluster_id, len(new_ads), [ ad['ProcId'] for ad in new_ads ]
+                        ))
                     if n_jobs_todo == 0: break
         logger.info('Summary: Submitted %s jobs to cluster %s', n_jobs_total, cluster_id)
-        # Clear submittables
-        self.submittables = []
 
     def submit_cli(self, njobsmax=None):
         qondor.utils.check_proxy()
@@ -365,6 +381,7 @@ class Session(object):
                 if key.lower() == 'environment': val = qondor.schedd.format_env_htcondor(val)
                 jdl_contents.append('{} = {}'.format(key, val))
             jdl_contents.append('queue {}\n'.format(njobs))
+            if n_jobs_todo == 0: break
         # Dump to file
         jdl_contents = '\n'.join(jdl_contents)
         with qondor.utils.openfile(jdl_file, 'w') as jdl:
@@ -373,30 +390,61 @@ class Session(object):
         # Run the actual submit command
         with qondor.utils.switchdir(self.rundir):
             output = qondor.utils.run_command(['condor_submit', osp.basename(jdl_file)])
-        # Clear the submittables
-        self.submittables = []
         # Get some info from the condor_submit command, if not dry mode
         if qondor.DRYMODE:
             logger.info('Summary: Submitted %s jobs to cluster 0', n_jobs_total)
         else:
-            match = re.search(r'(\d+) job\(s\) submitted to cluster (\d+)', '\n'.join(output))
-            if match:
-                logger.info('Submitted %s jobs to cluster_id %s', match.group(1), match.group(2))
-            else:
+            matches = re.findall(r'(\d+) job\(s\) submitted to cluster (\d+)', '\n'.join(output))
+            if not len(matches):
                 logger.error(
                     'condor_submit exited ok but could not determine where and how many jobs were submitted'
                     )
+            # Unfortunately we have to match the number of submitted jobs back to the submission dicts
+            # with a while-loop and careful counting
+            submittables = iter(self.submittables)
+            for njobs_submitted, cluster_id in matches:
+                logger.info('Submitted %s jobs to cluster_id %s', njobs_submitted, cluster_id)
+                njobs_assigned = 0
+                while njobs_assigned < njobs_submitted:
+                    sub, njobs_thissub = next(submittables) # Get the next sub
+                    proc_ids = list(range(njobs_assigned, njobs_assigned+njobs_thissub)) # Build the list of proc_ids
+                    njobs_assigned += njobs_thissub
+                    self.submitted.append((
+                        sub, cluster_id, njobs_assigned, proc_ids
+                        ))
 
     def submit(self, cli, *args, **kwargs):
         """
         Wrapper that just picks the specific submit method
         """
-        return self.submit_cli(*args, **kwargs) if cli else self.submit_pythonbindings(*args, **kwargs)
+        qondor.utils.create_directory(self.rundir)
+        # Run the submission code
+        self.submit_cli(*args, **kwargs) if cli else self.submit_pythonbindings(*args, **kwargs)
+        if not qondor.DRYMODE:
+            # Dump some submission information to a .json file for possible resubmission later
+            njobsmax = kwargs.get('njobsmax', None)
+            submission_timestamp = qondor.get_submission_timestamp()
+            submission = {
+                'submission_timestamp' : submission_timestamp,
+                # 'submittables' : self.submittables,
+                'njobsmax' : njobsmax,
+                'cli' : cli,
+                'submitted' : self.submitted
+                }
+            submission_jsonfile = osp.join(self.rundir, 'submission_{}.json'.format(submission_timestamp))
+            with open(submission_jsonfile, 'w') as f:
+                json.dump(submission, f)
+            # Also copy this file to submission_latest.json for easier retrieval
+            shutil.copyfile(submission_jsonfile, osp.join(self.rundir, 'submission_latest.json'))
+        # Clear the submittables
+        self.submittables = []
+        self.submitted = []
 
 
 class Cluster(object):
 
     ICLUSTER = 0
+    NAMES = set()
 
     def __init__(self,
         runcode,
@@ -422,10 +470,25 @@ class Cluster(object):
         self.run_env = run_env
         self.transfer_files = {}
         self.session = session
+        # Try to use a more human-readable name if it's given
+        if not 'name' in kwargs:
+            self.name = 'cluster{}'.format(self.i_cluster)
+        else:
+            # If the name was already used before, append a number to it until it's unique
+            name = kwargs['name']
+            if name in self.NAMES:
+                name += '{}'
+                i_attempt = 0
+                while name.format(i_attempt) in self.NAMES:
+                    i_attempt += 1
+                name = name.format(i_attempt)
+            self.__class__.NAMES.add(name)
+            self.name = name
+        logger.info('Using name %s', self.name)
         # Base filenames needed for the job
-        self.runcode_filename = 'cluster{}.py'.format(self.i_cluster)
-        self.sh_entrypoint_filename = 'cluster{}.sh'.format(self.i_cluster)
-        self.scope_filename = 'cluster{}.json'.format(self.i_cluster)
+        self.runcode_filename = '{}.py'.format(self.name)
+        self.sh_entrypoint_filename = '{}.sh'.format(self.name)
+        self.scope_filename = '{}.json'.format(self.name)
         # Process pip packages
         self.pips = []
         pips = [] if pips is None else pips
@@ -500,7 +563,6 @@ class Cluster(object):
             'set -uxoE pipefail',
             'echo "Setting up custom pip install dir"',
             'HOME="$(pwd)"',
-            'pip(){ ${pipdir}/bin/pip "$@"; }  # To avoid any local pip installations',
             'export pip_install_dir="$(pwd)/install"',
             'mkdir -p "${pip_install_dir}/bin"',
             'mkdir -p "${pip_install_dir}/lib/python2.7/site-packages"',
@@ -541,7 +603,7 @@ class Cluster(object):
             python_cmd += ' ' + ' '.join([quote(s) for s in self.run_args])
         sh += [
             python_cmd,
-            'echo "$?" > exitcode_${CONDOR_CLUSTER_NUMBER}_${CONDOR_PROCESS_ID}.txt', # Store the python exit code in a file
+            'echo "$?" > exitcode_${QONDORCLUSTERNAME}_${CONDOR_CLUSTER_NUMBER}_${CONDOR_PROCESS_ID}.txt', # Store the python exit code in a file
             ''            
             ]
         sh = '\n'.join(sh)
