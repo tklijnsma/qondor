@@ -573,7 +573,11 @@ def dist_is_editable(dist):
     # If a string is passed, convert it to a module object
     if is_string(dist):
         import pkg_resources
-        dist = pkg_resources.get_distribution(dist)
+        try:
+            dist = pkg_resources.get_distribution(dist)
+        except pkg_resources.DistributionNotFound:
+            logger.info('Package %s is not installed; assuming non-editable install', dist)
+            return False
     # Check if the module's .egg-link is somewhere on the python path
     for path_item in sys.path:
         egg_link = osp.join(path_item, dist.project_name + '.egg-link')

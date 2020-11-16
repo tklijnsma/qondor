@@ -151,6 +151,9 @@ RUN_ENVS = {
         'export PYTHONPATH="${pipdir}/lib/python2.7/site-packages/:${PYTHONPATH}"',
         'pip(){ ${pipdir}/bin/pip "$@"; }  # To avoid any local pip installations',
         ],
+    'centos7-py36' :[
+        'source /cvmfs/sft.cern.ch/lcg/views/LCG_96python3/x86_64-centos7-gcc8-opt/setup.sh',
+        ]
     }
 
 def get_default_sub(submission_time=None):
@@ -567,7 +570,8 @@ class Cluster(object):
             'mkdir -p "${pip_install_dir}/bin"',
             'mkdir -p "${pip_install_dir}/lib/python2.7/site-packages"',
             'export PATH="${pip_install_dir}/bin:${PATH}"',
-            'export PYTHONPATH="${pip_install_dir}/lib/python2.7/site-packages:${PYTHONPATH}"',
+            'export PYTHONVERSION=$(python -c "import sys; print(\'{}.{}\'.format(sys.version_info.major, sys.version_info.minor))")',
+            'export PYTHONPATH="${pip_install_dir}/lib/python${PYTHONVERSION}/site-packages:${PYTHONPATH}"',
             '',
             'pip -V',
             'which pip',
@@ -583,12 +587,12 @@ class Cluster(object):
                 sh.extend([
                     'mkdir {0}'.format(package),
                     'tar xf {0}.tar -C {0}'.format(package),
-                    'pip install --install-option="--prefix=${{pip_install_dir}}" -e {0}/'.format(package)
+                    'pip install --install-option="--prefix=${{pip_install_dir}}" --no-cache-dir -e {0}/'.format(package)
                     ])
             else:
                 # Non-editable install from pypi
                 sh.append(
-                    'pip install --install-option="--prefix=${{pip_install_dir}}" {0}'.format(package)
+                    'pip install --install-option="--prefix=${{pip_install_dir}}" --no-cache-dir {0}'.format(package)
                     )
         # Make the actual python call to run the required job code
         # Also echo the exitcode of the python command to a file, to easily check whether jobs succeeded
