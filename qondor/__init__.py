@@ -176,6 +176,13 @@ if os.environ.get('HOSTNAME', '').endswith('fnal.gov'):
     schedd.GLOBAL_SCHEDDMAN_CLS = schedd.ScheddManagerFermiHTC
     seutils.set_default_mgm('root://cmseos.fnal.gov')
 
+# Load the bare environment saved before doing any setup
+BARE_ENV = {}
+if BATCHMODE and osp.isfile('bare_env.txt'):
+    with open('bare_env.txt') as f:
+        for line in f.readlines():
+            key, value = line.strip().split('=', 1)
+            BARE_ENV[key] = value
 
 # ___________________________________________________
 # 'Globals'

@@ -571,6 +571,7 @@ class Cluster(object):
             '',
             'export VO_CMS_SW_DIR=/cvmfs/cms.cern.ch/',
             'source /cvmfs/cms.cern.ch/cmsset_default.sh',
+            'env > bare_env.txt', # Save the environment before doing any other environment setup
             '',
             ]
         # Set the runtime environment (typically sourcing scripts to get the right python/gcc/ROOT/etc.)
