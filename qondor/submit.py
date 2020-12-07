@@ -78,11 +78,19 @@ def submit_python_job_file(filename, cli=False, njobsmax=None, run_args=None, re
     # First create exec scope dict, with a few handy functions
     _first_cluster_ptr = [None]
     session = Session(name=osp.basename(filename).replace('.py',''))
+    # Place to store 'global' pip installs
+    pips = []
     def htcondor_setting(key, value):
         session.htcondor(key, value)
+    def pip_fn(package, install_instruction=None):
+        if install_instruction:
+            pips.append((package, install_instruction))
+        else:
+            pips.append(package)
     def submit_fn(*args, **kwargs):
         kwargs.setdefault('session', session)
         kwargs.setdefault('run_args', run_args)
+        kwargs['pips'] = kwargs.get('pips', []) + pips # Add 'global' installs
         njobs = kwargs.get('njobs', 1)
         cluster = Cluster(runcode, *args, **kwargs)
         if return_first_cluster:
@@ -96,6 +104,7 @@ def submit_python_job_file(filename, cli=False, njobsmax=None, run_args=None, re
         'session'    : session,
         'htcondor'   : htcondor_setting,
         'submit'     : submit_fn,
+        'pip'        : pip_fn,
         'submit_now' : submit_now_fn,
         'runcode'    : runcode,
         'run_args'   : run_args,
@@ -266,10 +275,14 @@ class Session(object):
     def handle_python_package_tarballs(self, cluster):
         # Put in python package tarballs required for the code in the job
         for package, install_instruction in cluster.pips:
+            # Packages with a specific version should always be installed from pypi
+            for c in ['<', '=', '>']:
+                if c in package:
+                    install_instruction = 'pypi'
             # Determine whether package was installed editably
-            if install_instruction == 'auto' and qondor.utils.dist_is_editable(package): install_instruction = 'editable-install'
+            if install_instruction == 'auto' and qondor.utils.dist_is_editable(package): install_instruction = 'editable'
             # If package was installed editably, tarball it up and include it
-            if install_instruction == 'editable-install':
+            if install_instruction == 'editable':
                 # Create the tarball if it wasn't already created
                 if not package in self._created_python_module_tarballs:
                     self._created_python_module_tarballs[package] = qondor.utils.tarball_python_module(package, outdir=self.rundir)
@@ -580,11 +593,33 @@ class Cluster(object):
             ''
             ]
         # `pip install` the required pip packages for the job
+        def should_split_version(package):
+            for c in [ '<', '=', '>' ]:
+                if c in package:
+                    return True
+            return False
+        def split_version_stuff(package):
+            split_at_index = False
+            for c in [ '<', '=', '>' ]:
+                if c in package:
+                    index = package.index(c)
+                    if split_at_index is False or index < split_at_index:
+                        split_at_index = index
+            if split_at_index:
+                return package[:split_at_index], package[split_at_index:]
+            return False
         for package, install_instruction in self.pips:
-            package = package.replace('.', '-').rstrip('/')
+            package = package.rstrip('/')
+            if should_split_version(package):
+                install_instruction = 'pypi'
+                package_name, version_stuff = split_version_stuff(package)
+                package_name = package_name.replace('.', '-')
+                package = package_name + version_stuff
+            else:
+                package = package.replace('.', '-').rstrip('/')
             if install_instruction == 'auto':
-                install_instruction = 'editable-install' if qondor.utils.dist_is_editable(package) else 'pypi-instal'
-            if install_instruction == 'editable-install':
+                install_instruction = 'editable' if qondor.utils.dist_is_editable(package) else 'pypi'
+            if install_instruction == 'editable':
                 # Editable install: Manually give tarball, extract, and install
                 sh.extend([
                     'mkdir {0}'.format(package),
