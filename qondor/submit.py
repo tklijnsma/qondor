@@ -510,7 +510,17 @@ class Cluster(object):
         # Process pip packages
         self.pips = []
         pips = [] if pips is None else pips
-        for pip in [('qondor', 'auto'), ('seutils', 'auto')] + pips:
+        def check_if_in_pips(package):
+            """Checks if a package is already in the list"""
+            package, _ = qondor.utils.pip_split_version(package)
+            for pip in pips:
+                if not qondor.utils.is_string(pip): pip = pip[0]
+                pip, _ = qondor.utils.pip_split_version(pip)
+                if pip == package: return True
+            return False
+        if not check_if_in_pips('qondor'): pips.append(('qondor', 'auto'))
+        if not check_if_in_pips('seutils'): pips.append(('seutils', 'auto'))
+        for pip in pips:
             if qondor.utils.is_string(pip):
                 self.pips.append((pip, 'auto'))
             else:
@@ -594,30 +604,11 @@ class Cluster(object):
             ''
             ]
         # `pip install` the required pip packages for the job
-        def should_split_version(package):
-            for c in [ '<', '=', '>' ]:
-                if c in package:
-                    return True
-            return False
-        def split_version_stuff(package):
-            split_at_index = False
-            for c in [ '<', '=', '>' ]:
-                if c in package:
-                    index = package.index(c)
-                    if split_at_index is False or index < split_at_index:
-                        split_at_index = index
-            if split_at_index:
-                return package[:split_at_index], package[split_at_index:]
-            return False
         for package, install_instruction in self.pips:
-            package = package.rstrip('/')
-            if should_split_version(package):
-                install_instruction = 'pypi'
-                package_name, version_stuff = split_version_stuff(package)
-                package_name = package_name.replace('.', '-')
-                package = package_name + version_stuff
-            else:
-                package = package.replace('.', '-').rstrip('/')
+            package_name, version_stuff = qondor.utils.pip_split_version(package.rstrip('/'))
+            package_name = package_name.replace('.', '-')
+            package = package_name + version_stuff
+            if version_stuff: install_instruction = 'pypi' # Force download from pypi for a specific version
             if install_instruction == 'auto':
                 install_instruction = 'editable' if qondor.utils.dist_is_editable(package) else 'pypi'
             if install_instruction == 'editable':

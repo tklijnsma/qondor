@@ -278,6 +278,29 @@ def is_string(string):
     return isinstance(string, basestring)
 
 
+def pip_has_version(package):
+    """
+    For pip install strings: Checks if there is a part that mentions the version
+    """
+    for c in [ '<', '=', '>' ]:
+        if c in package:
+            return True
+    return False
+
+def pip_split_version(package):
+    """
+    For pip install strings: Splits the part of the package name and the version part
+    """
+    split_at_index = False
+    for c in [ '<', '=', '>' ]:
+        if c in package:
+            index = package.index(c)
+            if split_at_index is False or index < split_at_index:
+                split_at_index = index
+    if split_at_index:
+        return package[:split_at_index], package[split_at_index:]
+    return package, ''
+
 def get_installation_path_of_module(module):
     logger.debug(
         'Trying to determine installation path of %s',
