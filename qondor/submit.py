@@ -161,8 +161,6 @@ RUN_ENVS = {
         'pip(){ ${pipdir}/bin/pip "$@"; }  # To avoid any local pip installations',
         ],
     'centos7-py36' :[
-        'alias xrdcp=$(which xrdcp)',
-        'alias gfal-copy=$(which gfal-copy)',
         'source /cvmfs/sft.cern.ch/lcg/views/LCG_96python3/x86_64-centos7-gcc8-opt/setup.sh',
         ]
     }
