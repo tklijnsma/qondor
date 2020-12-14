@@ -587,6 +587,12 @@ def check_proxy():
             'voms-proxy-init -voms cms -valid 192:00'
             )
         raise
+    except OSError:
+        logger.error(
+            'The grid-proxy-info is not found or behaves weird; '
+            'Continuing but note that your grid proxy may not be valid'
+            )
+        pass
 
 def dist_is_editable(dist):
     """
