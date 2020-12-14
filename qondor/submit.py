@@ -377,7 +377,6 @@ class Session(object):
         n_jobs_summed = sum([ njobs for _, njobs in self.submittables ])
         n_jobs_total = min(n_jobs_summed, njobsmax)
         logger.info('Submitting all jobs; %s out of %s', n_jobs_total, n_jobs_summed)
-        schedd = qondor.schedd.get_best_schedd()
         n_jobs_todo = n_jobs_total
         # Compile the .jdl file
         get_cluster_nr = lambda sub: sub['environment']['QONDORICLUSTER']
