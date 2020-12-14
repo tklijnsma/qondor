@@ -211,7 +211,7 @@ class CMSSW(object):
             'Tarballing {0} ==> {1}'
             .format(cmssw_path, dst)
             )
-        if excluse is None: exclude = []
+        if exclude is None: exclude = []
         exclude.append('tmp')
         with qondor.utils.switchdir(osp.dirname(cmssw_path)):
             cmd = [

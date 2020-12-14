@@ -418,6 +418,7 @@ class Session(object):
             # with a while-loop and careful counting
             submittables = iter(self.submittables)
             for njobs_submitted, cluster_id in matches:
+                njobs_submitted = int(njobs_submitted)
                 logger.info('Submitted %s jobs to cluster_id %s', njobs_submitted, cluster_id)
                 njobs_assigned = 0
                 while njobs_assigned < njobs_submitted:
