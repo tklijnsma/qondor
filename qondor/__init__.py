@@ -85,10 +85,11 @@ def _byteify(data, ignore_dicts=False):
     # if this is a dictionary, return dictionary of byteified keys and values
     # but only if we haven't already byteified it
     if isinstance(data, dict) and not ignore_dicts:
-        return {
-            _byteify(key, ignore_dicts=True): _byteify(value, ignore_dicts=True)
+        # Python 2.6 compatibility, no dict comprehensions
+        return dict([
+            (_byteify(key, ignore_dicts=True), _byteify(value, ignore_dicts=True))
             for key, value in data.items()
-        }
+            ])
     # if it's anything else, return it in its original form
     return data
 
@@ -167,7 +168,11 @@ if BATCHMODE and osp.isfile('rootcache.tar.gz'):
 if os.environ.get('HOSTNAME', '').endswith('fnal.gov'):
     # Fix to be able to import htcondor python bindings
     import sys
-    if sys.version_info.major < 3:
+    try:
+        major_version = sys.version_info.major
+    except AttributeError: # Python 2.6 compatibility
+        major_version = sys.version_info[1]
+    if major_version < 3:
         logger.warning('Detected FNAL: Modifying path to use system htcondor python bindings')
         sys.path.extend([
             '/usr/lib64/python2.6/site-packages',
