@@ -472,6 +472,7 @@ class Cluster(object):
         run_env='sl7-py27',
         rundir='.',
         session=None,
+        transfer_files=None,
         **kwargs
         ):
         self.i_cluster = self.__class__.ICLUSTER
@@ -485,6 +486,9 @@ class Cluster(object):
         if qondor.utils.is_string(run_env): run_env = RUN_ENVS[run_env]
         self.run_env = run_env
         self.transfer_files = {}
+        if transfer_files:
+            for f in transfer_files:
+                self._add_transfer_file_str_or_tuple(f) 
         self.session = session
         # Try to use a more human-readable name if it's given
         if not 'name' in kwargs:
@@ -525,6 +529,31 @@ class Cluster(object):
                 self.pips.append((pip[0], pip[1]))
         # Add addtional keywords to the scope
         self.scope.update(kwargs)
+
+    def _add_transfer_file_str_or_tuple(self, t):
+        if qondor.utils.is_string(t):
+            self.add_transfer_file(t)
+        else:
+            key, value = t
+            self.add_transfer_file(value, key=key)
+
+    def add_transfer_file(self, filename, key=None):
+        """
+        Adds a file to the self.transfer_files dict in order for it to be transferred
+        """
+        filename = osp.abspath(osp.expanduser(filename))
+        if key is None:
+            key = osp.basename(filename)
+            # Make a unique key
+            if key in self.transfer_files:
+                key += '_{0}'
+                for i in range(100):
+                    if not key.format(i) in self.transfer_files:
+                        key = key.format(i)
+                        break
+                else:
+                    raise Exception('Could not make a unique key')
+        self.transfer_files[key] = filename
 
     def runcode_to_file(self):
         self.runcode_filename = osp.join(self.rundir, self.runcode_filename)
