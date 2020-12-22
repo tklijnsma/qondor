@@ -2,44 +2,18 @@
 from __future__ import print_function
 
 import os.path as osp
-import re
 
 
-def update_version_no(contents):
-    pat = r"\s*version\s*=\s*\"([\d\.]+)\""
-    match = re.search(pat, contents)
-    if not match:
-        raise RuntimeError("Cannot update version number")
-    version_components = match.group(1).split(".")
-    version_components[-1] = str(int(version_components[-1]) + 1)
-    new_version_str = ".".join(version_components)
-    begin, end = match.span(1)
-    contents = contents[:begin] + str(new_version_str) + contents[end:]
+def update_version():
+    version_file = osp.join(osp.dirname(__file__), 'VERSION')
+    with open(version_file, 'r') as f:
+        version = f.read().strip()
+    major, minor = version.rsplit('.', 1)
+    minor = str(int(minor)+1)
+    updated_version = major + '.' + minor
+    print('Updating {0} from {1} to {2}'.format(version_file, version, updated_version))
+    with open(version_file, 'w') as f:
+        f.write(updated_version)
 
-    # Now the replacement in the download_url
-    pat = r"\s*download_url\s*=\s*\"[\w\.\:\/\_]+v([\d\_]+)\.tar\.gz\""
-    match = re.search(pat, contents)
-    if not match:
-        raise RuntimeError("Cannot update version number")
-    version_components = match.group(1).split("_")
-    version_components[-1] = str(int(version_components[-1]) + 1)
-    new_version_str = "_".join(version_components)
-    begin, end = match.span(1)
-    contents = contents[:begin] + str(new_version_str) + contents[end:]
-    return contents
-
-
-setuppy = osp.join(osp.dirname(__file__), "setup.py")
-with open(setuppy, "r") as f:
-    contents = f.read()
-
-print("> Updating contents from:")
-print(contents)
-
-contents = update_version_no(contents)
-
-print("> To:")
-print(contents)
-
-with open(setuppy, "w") as f:
-    f.write(contents)
+if __name__ == '__main__':
+    update_version()
