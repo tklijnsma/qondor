@@ -18,8 +18,9 @@ def debug(flag=True):
     else:
         logger.setLevel(logging.INFO)
 
+
 # Load version as a module variable
-with open(osp.join(osp.dirname(__file__), '../VERSION'), 'r') as f:
+with open(osp.join(osp.dirname(__file__), "../VERSION"), "r") as f:
     version = f.read().strip()
 
 # Path to non-python-package files
