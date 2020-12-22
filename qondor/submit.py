@@ -92,7 +92,7 @@ def submit_python_job_file(
     # Run the submitcode
     # First create exec scope dict, with a few handy functions
     _first_cluster_ptr = [None]
-    n_calls_to_submit_fn = 0
+    n_calls_to_submit_fn = [0]
     session = Session(name=osp.basename(filename).replace(".py", ""))
     # Place to store 'global' pip installs
     pips = []
@@ -116,7 +116,7 @@ def submit_python_job_file(
             _first_cluster_ptr[0] = cluster
             raise StopProcessing
         session.add_submission(cluster, cli=cli, njobsmax=njobsmax, njobs=njobs)
-        n_calls_to_submit_fn += 1  # noqa F823 F841
+        n_calls_to_submit_fn[0] += 1
 
     def submit_now_fn():
         session.submit(cli, njobsmax=njobsmax)
@@ -148,7 +148,7 @@ def submit_python_job_file(
         exec_wrapper(submitcode, exec_scope)
         # Special case: There was no call to submit
         # Just submit 1 job in that case
-        if n_calls_to_submit_fn == 0:
+        if n_calls_to_submit_fn[0] == 0:
             logger.info(
                 "No calls to submit() were made in the submit code; submitting 1 job"
             )
