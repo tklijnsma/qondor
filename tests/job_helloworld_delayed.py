@@ -1,2 +1,2 @@
-#$ delay 30 s
+# $ delay 30 s
 print "Hello world!"
