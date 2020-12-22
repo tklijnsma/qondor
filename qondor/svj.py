@@ -108,7 +108,7 @@ def step_cmd(inpre, outpre, physics):
     return cmd
 
 
-class CMSSW(qondor.CMSSW):
+class CMSSW(qondor.cmssw.CMSSW):
     """Subclass of the main CMSSW class for SVJ"""
 
     def __init__(self, *args, **kwargs):
@@ -197,7 +197,7 @@ class CMSSW(qondor.CMSSW):
         return expected_outfile
 
 
-class TreeMakerCMSSW(qondor.CMSSW):
+class TreeMakerCMSSW(qondor.cmssw.CMSSW):
     """Subclass of the main CMSSW class for SVJ"""
 
     _readfiles_cache = {}

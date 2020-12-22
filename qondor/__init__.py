@@ -43,10 +43,9 @@ TIMESTAMP_FMT = "%Y%m%d_%H%M%S"
 
 import seutils  # noqa E402
 
-from . import resubmit, schedd, svj, utils
+from . import cmssw, resubmit, schedd, svj, utils
 from .cmssw import CMSSW
 from .cmssw_releases import get_arch
-from .schedd import get_best_schedd, get_schedd_ads, remove_jobs, wait
 from .submit import get_first_cluster
 
 # ___________________________________________________
@@ -256,8 +255,7 @@ def init_cmssw(tarball_key="cmssw_tarball", scram_arch=None, outdir=None):
         cmssw_tarball = scope[tarball_key]
     else:
         raise Exception("Cannot load tarball {0}".format(tarball_key))
-    cmssw = CMSSW.from_tarball(cmssw_tarball, scram_arch, outdir=outdir)
-    return cmssw
+    return CMSSW.from_tarball(cmssw_tarball, scram_arch, outdir=outdir)
 
 
 def get_submission_timestamp():
