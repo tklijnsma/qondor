@@ -6,7 +6,7 @@ import re
 
 
 def update_version_no(contents):
-    pat = r"\s*version\s*=\s*\'([\d\.]+)\'"
+    pat = r"\s*version\s*=\s*\"([\d\.]+)\""
     match = re.search(pat, contents)
     if not match:
         raise RuntimeError("Cannot update version number")
@@ -17,7 +17,7 @@ def update_version_no(contents):
     contents = contents[:begin] + str(new_version_str) + contents[end:]
 
     # Now the replacement in the download_url
-    pat = r"\s*download_url\s*=\s*\'[\w\.\:\/\_]+v([\d\_]+)\.tar\.gz\'"
+    pat = r"\s*download_url\s*=\s*\"[\w\.\:\/\_]+v([\d\_]+)\.tar\.gz\""
     match = re.search(pat, contents)
     if not match:
         raise RuntimeError("Cannot update version number")
