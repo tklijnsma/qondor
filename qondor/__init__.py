@@ -5,23 +5,8 @@ import logging
 import os
 import os.path as osp
 import pprint
-import uuid
 
-COLORS = {
-    "yellow": "\033[33m",
-    "red": "\033[31m",
-    "green": "\033[32m",
-}
-RESET = "\033[0m"
-
-
-def colored(text, color=None):
-    if not color is None:
-        text = COLORS[color] + text + RESET
-    return text
-
-
-from .logger import setup_logger, setup_subprocess_logger
+from .logger import colored, setup_logger, setup_subprocess_logger
 
 logger = setup_logger()
 subprocess_logger = setup_subprocess_logger()
@@ -56,7 +41,7 @@ COLLECTOR_NODES = None
 DEFAULT_MGM = None
 TIMESTAMP_FMT = "%Y%m%d_%H%M%S"
 
-import seutils
+import seutils  # noqa E402
 
 from . import resubmit, schedd, svj, utils
 from .cmssw import CMSSW
@@ -68,10 +53,13 @@ from .submit import get_first_cluster
 # Decisions at import-time depending on whether this is a job or
 # an import on an interactive node
 
-# object_hook method to load regular strings rather than unicode strings
-# when doing json.load(s)
-# See https://stackoverflow.com/a/33571117/9209944
+
 def _json_load_byteified(file_handle):
+    """
+    object_hook method to load regular strings rather than unicode strings
+    when doing json.load(s)
+    See https://stackoverflow.com/a/33571117/9209944
+    """
     return _byteify(json.load(file_handle, object_hook=_byteify), ignore_dicts=True)
 
 

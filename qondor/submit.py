@@ -6,11 +6,7 @@ import os.path as osp
 import pprint
 import re
 import shutil
-import sys
-import uuid
-from contextlib import contextmanager
 from datetime import datetime
-from time import strftime
 
 import seutils
 
@@ -224,7 +220,7 @@ def get_default_sub(submission_time=None):
                 'Set x509userproxy to "%s" based on output from voms-proxy-info',
                 sub["x509userproxy"],
             )
-        except:
+        except Exception:
             logger.warning(
                 "Could not find a x509userproxy to pass; manually "
                 "set the htcondor variable 'x509userproxy' if your "
@@ -335,7 +331,7 @@ class Session(object):
             # If package was installed editably, tarball it up and include it
             if install_instruction == "editable":
                 # Create the tarball if it wasn't already created
-                if not package in self._created_python_module_tarballs:
+                if package not in self._created_python_module_tarballs:
                     self._created_python_module_tarballs[
                         package
                     ] = qondor.utils.tarball_python_module(package, outdir=self.rundir)
@@ -469,7 +465,10 @@ class Session(object):
         logger.info("Submitting all jobs; %s out of %s", n_jobs_total, n_jobs_summed)
         n_jobs_todo = n_jobs_total
         # Compile the .jdl file
-        get_cluster_nr = lambda sub: sub["environment"]["QONDORICLUSTER"]
+
+        def get_cluster_nr(sub):
+            return sub["environment"]["QONDORICLUSTER"]
+
         jdl_file = osp.join(
             self.rundir,
             "qondor_{}-{}.jdl".format(
@@ -600,7 +599,7 @@ class Cluster(object):
                 self._add_transfer_file_str_or_tuple(f)
         self.session = session
         # Try to use a more human-readable name if it's given
-        if not "name" in kwargs:
+        if "name" not in kwargs:
             self.name = "cluster{}".format(self.i_cluster)
         else:
             # If the name was already used before, append a number to it until it's unique
@@ -881,7 +880,9 @@ def cmsconnect_settings(sub, blacklist=None, whitelist=None, cli=False):
         desired_sites.sort()
 
     # Add a plus only if submitting via .jdl file
-    addplus = lambda key: "+" + key if cli else key
+    def addplus(key):
+        return "+" + key if cli else key
+
     if desired_sites:
         logger.info("Submitting to desired sites: %s", ",".join(desired_sites))
         sub[addplus("DESIRED_Sites")] = '"' + ",".join(desired_sites) + '"'

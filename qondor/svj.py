@@ -2,13 +2,10 @@
 Module specific for the (boosted) svj analysis
 """
 
-import glob
 import logging
 import os
 import os.path as osp
-import shutil
 import subprocess
-import time
 
 import seutils
 

@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 import datetime
-import glob
 import logging
 import os
 import os.path as osp
@@ -353,7 +352,7 @@ def get_installation_path_of_module(module):
 
         distribution = pkg_resources.get_distribution(module.__name__)
         path = osp.abspath(distribution.location)
-    except:
+    except Exception:
         logger.debug("From module.__path__")
         path = osp.abspath(module.__path__[0])
         if not osp.exists(path):
@@ -362,6 +361,11 @@ def get_installation_path_of_module(module):
                 path,
                 module,
             )
+            try:
+                from importlib import reload
+            except ImportError:
+                # Probably this is python 2 then
+                pass
             reload(module)
             path = osp.abspath(module.__path__[0])
             if osp.exists(path):
@@ -664,10 +668,7 @@ def check_proxy():
     if qondor.DRYMODE:
         return
     try:
-        proxy_valid = (
-            subprocess.check_output(["grid-proxy-info", "-exists", "-valid", "168:00"])
-            == 0
-        )
+        subprocess.check_output(["grid-proxy-info", "-exists", "-valid", "168:00"])
         logger.info("Found a valid proxy")
     except subprocess.CalledProcessError:
         logger.error(

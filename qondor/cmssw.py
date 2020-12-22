@@ -29,7 +29,7 @@ class CMSSW(object):
             logger.warning("Will extract %s to default: %s", tarball, outdir)
             try:
                 qondor.utils.create_directory(outdir)
-            except:
+            except Exception:
                 logger.warning("Failed to create %s; attempting here (.)", outdir)
                 outdir = "."
                 qondor.utils.create_directory(outdir)

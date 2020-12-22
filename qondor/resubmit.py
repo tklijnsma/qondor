@@ -1,19 +1,8 @@
 # -*- coding: utf-8 -*-
 import glob
-import json
 import logging
-import os
 import os.path as osp
-import pprint
 import re
-import shutil
-import sys
-import uuid
-from contextlib import contextmanager
-from datetime import datetime
-from time import strftime
-
-import seutils
 
 import qondor
 
@@ -94,7 +83,7 @@ class Job(object):
         self.htcondor_status_str = None
 
     def is_running(self):
-        return JobFlags.IN_HTCONDOR in self.flags and not self.htcondor_status in [5, 6]
+        return JobFlags.IN_HTCONDOR in self.flags and self.htcondor_status not in [5, 6]
 
     def is_failed(self):
         if self.is_running():
@@ -109,7 +98,7 @@ class Job(object):
 
     def __repr__(self):
         r = "{}.{} {}".format(self.cluster_id, self.proc_id, ints_to_str(self.flags))
-        if not self.htcondor_status_str is None:
+        if self.htcondor_status_str is not None:
             r += " " + self.htcondor_status_str
         return r
 
@@ -130,7 +119,6 @@ class Resubmission(object):
         for sub, cluster_id, njobs, proc_ids, jobs in self._jobs_cache:
             failed_jobs = list(filter(lambda j: j.is_failed(), jobs))
             proc_ids = [j.proc_id for j in failed_jobs]
-            n_jobs = len(failed_jobs)
             yield sub, cluster_id, njobs, proc_ids, failed_jobs
 
     def jobs(self, only_failed=False):
@@ -272,8 +260,6 @@ class Resubmission(object):
                 only_failed=True
             ):
                 sub = sub_orig.copy()
-                name = sub["environment"]["QONDORCLUSTERNAME"]
-                i_cluster = int(sub["environment"]["QONDORICLUSTER"])
                 for job in jobs:
                     logger.info("Submitting job %s", job)
                     sub["environment"]["QONDOR_PROC_ID_RESUBMISSION"] = job.proc_id

@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 import logging
 import os
-import os.path as osp
 import pprint
 import re
 from contextlib import contextmanager
@@ -99,7 +98,7 @@ class ScheddManager(object):
             collector_node_addresses = (
                 htcondor.param["COLLECTOR_HOST_STRING"].strip().strip('"')
             )
-        except:
+        except Exception:
             logger.error(err_msg)
             raise
         if collector_node_addresses is None:
@@ -416,7 +415,7 @@ def get_jobs(*args, **kwargs):
     method = kwargs.pop("method", None)
     if method is None:
         try:
-            import htcondor
+            import htcondor  # noqa F401
 
             return get_jobs_bindings(*args, **kwargs)
         except ImportError:
@@ -457,7 +456,7 @@ def get_default_sub():
                 'Set x509userproxy to "%s" based on output from voms-proxy-info',
                 sub["x509userproxy"],
             )
-        except:
+        except Exception:
             logger.warning(
                 "Could not find a x509userproxy to pass; manually "
                 "set the htcondor variable 'x509userproxy' if your "

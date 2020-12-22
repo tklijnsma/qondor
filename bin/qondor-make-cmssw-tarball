@@ -1,7 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import qondor, seutils
-import argparse, sys, uuid, os.path as osp
+import argparse
+import os.path as osp
+import sys
+import uuid
+
+import seutils
+
+import qondor
+
 parser = argparse.ArgumentParser()
 parser.add_argument('cmsswpath', type=str, help='Path to a CMSSW distribution')
 parser.add_argument('-o', '--out', type=str, help='Destination directory of the output tarball', default='.')
