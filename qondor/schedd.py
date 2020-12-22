@@ -1,9 +1,14 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import qondor
-import logging, re, pprint, os, os.path as osp
-from time import sleep, strftime
+import logging
+import os
+import os.path as osp
+import pprint
+import re
 from contextlib import contextmanager
+from time import sleep, strftime
+
+import qondor
 
 logger = logging.getLogger("qondor")
 

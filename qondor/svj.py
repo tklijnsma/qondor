@@ -2,8 +2,17 @@
 Module specific for the (boosted) svj analysis
 """
 
-import os, os.path as osp, logging, glob, shutil, time, subprocess
-import qondor, seutils
+import glob
+import logging
+import os
+import os.path as osp
+import shutil
+import subprocess
+import time
+
+import seutils
+
+import qondor
 
 logger = logging.getLogger("qondor")
 

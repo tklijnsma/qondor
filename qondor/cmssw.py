@@ -1,5 +1,13 @@
-import os, os.path as osp, logging, glob, shutil, time
-import qondor, seutils
+import glob
+import logging
+import os
+import os.path as osp
+import shutil
+import time
+
+import seutils
+
+import qondor
 
 logger = logging.getLogger("qondor")
 

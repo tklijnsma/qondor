@@ -1,4 +1,5 @@
-import re, logging
+import logging
+import re
 
 logger = logging.getLogger("qondor")
 

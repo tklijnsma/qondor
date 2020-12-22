@@ -1,6 +1,8 @@
 # Script that updates the version in setup.py.
 from __future__ import print_function
-import os.path as osp, re
+
+import os.path as osp
+import re
 
 
 def update_version_no(contents):

@@ -1,10 +1,21 @@
 # -*- coding: utf-8 -*-
-import qondor
-import logging, os, os.path as osp, pprint, shutil, uuid, re, json, sys, glob
+import glob
+import json
+import logging
+import os
+import os.path as osp
+import pprint
+import re
+import shutil
+import sys
+import uuid
+from contextlib import contextmanager
 from datetime import datetime
 from time import strftime
-from contextlib import contextmanager
+
 import seutils
+
+import qondor
 
 logger = logging.getLogger("qondor")
 

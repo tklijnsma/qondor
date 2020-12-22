@@ -1,8 +1,17 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import os, shutil, logging, subprocess, glob, pprint, time, datetime, sys
+import datetime
+import glob
+import logging
+import os
 import os.path as osp
+import pprint
+import shutil
+import subprocess
+import sys
+import time
 from contextlib import contextmanager
+
 import qondor
 
 logger = logging.getLogger("qondor")

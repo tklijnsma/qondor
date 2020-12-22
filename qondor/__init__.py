@@ -1,5 +1,11 @@
 # -*- coding: utf-8 -*-
-import os, os.path as osp, uuid, logging, argparse, pprint, json
+import argparse
+import json
+import logging
+import os
+import os.path as osp
+import pprint
+import uuid
 
 COLORS = {
     "yellow": "\033[33m",
@@ -50,15 +56,13 @@ COLLECTOR_NODES = None
 DEFAULT_MGM = None
 TIMESTAMP_FMT = "%Y%m%d_%H%M%S"
 
-from . import utils
-from . import schedd
-from .schedd import get_best_schedd, get_schedd_ads, wait, remove_jobs
-from .submit import get_first_cluster
+import seutils
+
+from . import resubmit, schedd, svj, utils
 from .cmssw import CMSSW
 from .cmssw_releases import get_arch
-from . import resubmit
-from . import svj
-import seutils
+from .schedd import get_best_schedd, get_schedd_ads, remove_jobs, wait
+from .submit import get_first_cluster
 
 # ___________________________________________________
 # Decisions at import-time depending on whether this is a job or
