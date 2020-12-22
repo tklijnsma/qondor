@@ -427,7 +427,11 @@ def tarball_python_module(
         # Make sure it has a setup.py
         setuppy = osp.join(path, "setup.py")
         if not osp.isfile(setuppy):
-            raise OSError("Expected file {0} to exist; not a valid pypi package")
+            raise OSError(
+                "Error installing module {0}; Expected file {1} to exist; not a valid pypi package".format(
+                    module, setuppy
+                )
+            )
         outfile = osp.join(outdir, osp.basename(path) + ".tar")
         logger.info("Creating tarball from directory %s --> %s", path, outfile)
         if not dry:
@@ -450,6 +454,12 @@ def tarball_python_module(
                         "*.pyc",
                         "--exclude",
                         "*/.git",
+                        "--exclude",
+                        "*/dist/*",
+                        "--exclude",
+                        "*/.fcache/*",
+                        "--exclude",
+                        "*/examples/*",
                     ]
                 )
     else:

@@ -92,6 +92,7 @@ def submit_python_job_file(
     # Run the submitcode
     # First create exec scope dict, with a few handy functions
     _first_cluster_ptr = [None]
+    n_calls_to_submit_fn = 0
     session = Session(name=osp.basename(filename).replace(".py", ""))
     # Place to store 'global' pip installs
     pips = []
@@ -115,6 +116,7 @@ def submit_python_job_file(
             _first_cluster_ptr[0] = cluster
             raise StopProcessing
         session.add_submission(cluster, cli=cli, njobsmax=njobsmax, njobs=njobs)
+        n_calls_to_submit_fn += 1  # noqa F823 F841
 
     def submit_now_fn():
         session.submit(cli, njobsmax=njobsmax)
@@ -132,7 +134,7 @@ def submit_python_job_file(
         "njobsmax": njobsmax,
         "return_first_cluster": return_first_cluster,
     }
-    logger.warning("Running submission code now")
+    logger.info("Running submission code now")
     if return_first_cluster:
         try:
             exec_wrapper(submitcode, exec_scope)
@@ -144,7 +146,15 @@ def submit_python_job_file(
         return cluster
     else:
         exec_wrapper(submitcode, exec_scope)
-        # Do a submit_now call in case it wasn't done yet (if submit_now was called in the submit code this is a no-op)
+        # Special case: There was no call to submit
+        # Just submit 1 job in that case
+        if n_calls_to_submit_fn == 0:
+            logger.info(
+                "No calls to submit() were made in the submit code; submitting 1 job"
+            )
+            cluster = Cluster(runcode, session=session, run_args=run_args, njobs=1)
+            session.add_submission(cluster, cli=cli, njobsmax=njobsmax, njobs=1)
+        # Do a submit call in case it wasn't done yet (if submit_now was called in the submit code this is a no-op)
         session.submit(cli, njobsmax=njobsmax)
 
 
@@ -432,7 +442,7 @@ class Session(object):
                         if not qondor.DRYMODE
                         else 0
                     )
-                    logger.info(
+                    logger.warning(
                         "Submitted %s jobs for i_cluster %s (%s) to htcondor cluster %s",
                         len(new_ads) if not qondor.DRYMODE else njobs,
                         sub_orig["environment"]["QONDORICLUSTER"],
@@ -503,7 +513,7 @@ class Session(object):
             output = qondor.utils.run_command(["condor_submit", osp.basename(jdl_file)])
         # Get some info from the condor_submit command, if not dry mode
         if qondor.DRYMODE:
-            logger.info("Summary: Submitted %s jobs to cluster 0", n_jobs_total)
+            logger.warning("Summary: Submitted %s jobs to cluster 0", n_jobs_total)
         else:
             matches = re.findall(
                 r"(\d+) job\(s\) submitted to cluster (\d+)", "\n".join(output)
@@ -517,7 +527,7 @@ class Session(object):
             submittables = iter(self.submittables)
             for njobs_submitted, cluster_id in matches:
                 njobs_submitted = int(njobs_submitted)
-                logger.info(
+                logger.warning(
                     "Submitted %s jobs to cluster_id %s", njobs_submitted, cluster_id
                 )
                 njobs_assigned = 0
@@ -533,6 +543,9 @@ class Session(object):
         """
         Wrapper that just picks the specific submit method
         """
+        if len(self.submittables) == 0:
+            logger.warning("No jobs to be submitted")
+            return
         qondor.utils.create_directory(self.rundir)
         # Run the submission code
         self.submit_cli(*args, **kwargs) if cli else self.submit_pythonbindings(

@@ -35,17 +35,17 @@ if "QONDOR_BATCHMODE" in os.environ:
 try:
     import htcondor
 
-    logger.info("The python bindings for htcondor are imported")
+    logger.debug("The python bindings for htcondor are imported")
     BINDINGS_INSTALLED = True
 except ImportError:
-    logger.info("The python bindings for htcondor do not seem to be installed")
+    logger.debug("The python bindings for htcondor do not seem to be installed")
     BINDINGS_INSTALLED = False
 
 COLLECTOR_NODES = None
 DEFAULT_MGM = None
 TIMESTAMP_FMT = "%Y%m%d_%H%M%S"
 
-import seutils  # noqa E402
+import seutils
 
 from . import cmssw, resubmit, schedd, svj, utils
 from .cmssw import CMSSW
