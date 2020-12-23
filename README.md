@@ -262,7 +262,7 @@ import pathspec
 print(pathspec)
 ```
 
-The job should print `<module 'pathspec' from '/storage/local/data1/condor/execute/dir_20305/install/lib/python2.7/site-packages/pathspec/__init__.pyc'>`.
+The job should print something like `<module 'pathspec' from '/storage/local/data1/condor/execute/dir_20305/install/lib/python2.7/site-packages/pathspec/__init__.pyc'>`.
 Note that running this locally with `python whatever_you_called_it.py` requires that the
 package is already installed - qondor does not install packages except when ran as a job.
 
