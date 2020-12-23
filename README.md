@@ -204,6 +204,27 @@ The example job above would print (along with other stuff) the following in the 
 
 Note also this script can be tested locally before submitting to HTCondor.
 
+Copying big tarballs around via HTCondor is typically not recommended.
+`qondor.CMSSW` can also be initialized from a tarball located remotely:
+
+```
+"""# submit
+submit()
+"""# endsubmit
+
+import qondor
+cmssw = qondor.CMSSW.from_tarball("root://cmseos.fnal.gov//store/user/klijnsma/my_CMSSW_tarball.tar.gz")
+cmssw.run_commands([
+    "echo $PWD",
+    "which cmsRun",
+    "cmsRun --help"
+    ])
+
+```
+
+In this case, qondor will simply copy the tarball to the worker node first.
+This workflow is recommended over copying tarballs via HTCondor.
+
 
 ### Command line arguments
 
