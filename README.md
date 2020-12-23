@@ -219,7 +219,6 @@ cmssw.run_commands([
     "which cmsRun",
     "cmsRun --help"
     ])
-
 ```
 
 In this case, qondor will simply copy the tarball to the worker node first.
