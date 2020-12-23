@@ -35,6 +35,8 @@ git clone https://github.com/tklijnsma/qondor.git
 pip install -e qondor/
 ```
 
+qondor is (begrudgingly) supported down to python 2.6.
+
 
 ## Examples
 
@@ -54,9 +56,15 @@ qondor-submit whatever_you_called_it.py
 A directory called `qondor_whatever_you_called_it_YYYYMMDD_HHMMSS` will be created, a job will
 be submitted that runs the code in `whatever_you_called_it.py`,
 and relevant job files will be stored in the directory.
-If you inspect the `stderr` of the job, you should see `Hello World!` being printed.
+If you inspect the `stderr` of the job, you should see:
 
-Note that you can run the 'job code' locally by just running the script directly:
+```
+>>> Hello World!
+```
+
+being printed.
+
+Note that you can run the 'job code' locally by just running the script directly with python:
 
 ```
 python whatever_you_called_it.py
@@ -93,7 +101,18 @@ Keyword arguments to the `submit` function are available in the job using the `q
 object (with the limitation that values are JSON serializable).
 
 Running the code above with `qondor-submit whatever_you_called_it.py` will launch two jobs,
-one printing `This is foo`, and the other `This is bar`.
+each printing a string:
+
+```
+# In job 1
+>>> foo
+```
+
+```
+# In job 2
+>>> bar
+```
+
 Running the above code with `python whatever_you_called_it.py` will run only the _first job_
 locally, i.e. it will break after the first `submit` call. In this case, `python whatever_you_called_it.py`
 will simply print `This is foo`.
@@ -252,7 +271,7 @@ Note that HTCondor attributes that expect a string require double quotations:
 
 ## A note about submission
 
-HTCondor has official python bindings
+HTCondor has 
 [official python bindings](https://htcondor.readthedocs.io/en/latest/apis/python-bindings/),
 but you are usually at the mercy of the system administrator to install these system-wide.
 
