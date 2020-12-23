@@ -83,8 +83,8 @@ import qondor
 print("This is {0}".format(qondor.scope.my_str))
 ```
 
-The code between the `"""# submit` and `"""# endsubmit` tags is the *submission code*
-- the python code that is ran at submission time. The rest of the file is considered ordinary
+The code between the `"""# submit` and `"""# endsubmit` tags is the *submission code* -
+the python code that is ran at submission time. The rest of the file is considered ordinary
 python code.
 
 The submission code has access to the `submit` function,
