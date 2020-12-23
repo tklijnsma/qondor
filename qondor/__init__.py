@@ -116,12 +116,12 @@ class Scope(argparse.Namespace):
                     # d = json.load(f)
                     d = _json_load_byteified(f)
                     scope.__dict__.update(d)
+                self.is_loaded = True
                 logger.info(
                     "Loaded following scope from %s:\n%s",
                     scope_file,
                     pprint.pformat(scope),
                 )
-                self.is_loaded = True
                 return
         logger.info("Could not load scope")
 

@@ -97,9 +97,13 @@ class CMSSW(object):
         cmssw._is_renamed = True
         return cmssw
 
-    def __init__(self, cmssw_src, scram_arch=None):
+    def __init__(self, cmssw_path, scram_arch=None):
         super(CMSSW, self).__init__()
-        self.cmssw_src = osp.abspath(cmssw_src)
+        cmssw_path = cmssw_path.rstrip("/")
+        if cmssw_path.endswith("src"):
+            cmssw_path = osp.dirname(cmssw_path)
+        self.cmssw_path = osp.abspath(cmssw_path)
+        self.cmssw_src = osp.join(self.cmssw_path, "src")
         if scram_arch is None:
             compiled_arches = glob.glob(osp.join(self.cmssw_src, "../bin/slc*"))
             if compiled_arches:
