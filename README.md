@@ -44,7 +44,7 @@ The most basic example consists of a simple, ordinary python script.
 Create a file with the following contents:
 
 ```
-print 'Hello world!'
+print('Hello world!')
 ```
 
 and submit it with:
