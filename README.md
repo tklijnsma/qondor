@@ -105,12 +105,12 @@ each printing a string:
 
 ```
 # In job 1
->>> foo
+>>> This is foo
 ```
 
 ```
 # In job 2
->>> bar
+>>> This is bar
 ```
 
 Running the above code with `python whatever_you_called_it.py` will run only the _first job_
