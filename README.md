@@ -35,7 +35,7 @@ git clone https://github.com/tklijnsma/qondor.git
 pip install -e qondor/
 ```
 
-qondor is (begrudgingly) supported down to python 2.6.
+qondor is supported for python 3 and (begrudgingly) down to python 2.6.
 
 
 ## Examples
