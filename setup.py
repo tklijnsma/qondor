@@ -1,6 +1,6 @@
 from setuptools import setup
 
-with open("VERSION", "r") as f:
+with open("qondor/include/VERSION", "r") as f:
     version = f.read().strip()
 
 setup(
