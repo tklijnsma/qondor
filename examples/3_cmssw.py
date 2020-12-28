@@ -8,6 +8,7 @@ submit(transfer_files=[tarball_file])
 """# endsubmit
 
 import qondor
+
 cmssw = qondor.CMSSW.from_tarball("CMSSW_11_2_0_pre10.tar.gz")
 cmssw.run_commands([
     "echo $PWD",
