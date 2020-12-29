@@ -108,6 +108,26 @@ def step_cmd(inpre, outpre, physics):
     return cmd
 
 
+def gridpack_cmd(physics, nogridpack=False):
+    cmd = (
+        "python runMG.py"
+        " year={year}"
+        " madgraph=1"
+        " channel=s"
+        " outpre=step0_GRIDPACK"
+        " mMediator={mz:.0f}"
+        " mDark={mdark:.0f}"
+        " rinv={rinv}".format(**physics)
+    )
+    if physics["boost"] > 0.0:
+        cmd += " boost={}".format(physics["boost"])
+    if physics["max_events"] > 0.0:
+        cmd += " maxEvents={}".format(physics["max_events"])
+    if nogridpack:
+        cmd += " nogridpack=1"
+    return cmd
+
+
 class CMSSW(qondor.cmssw.CMSSW):
     """Subclass of the main CMSSW class for SVJ"""
 
@@ -195,6 +215,17 @@ class CMSSW(qondor.cmssw.CMSSW):
                 n_attempts=3 if ("RECO" in outpre or "DIGI" in outpre) else 1,
             )
         return expected_outfile
+
+    def run_gridpack(self, physics, nogridpack=False):
+        """
+        Creates a MadGraph gridpack for the given physics
+        """
+        return self.run_commands(
+            [
+                "cd {0}".format(self.svj_path),
+                gridpack_cmd(physics, nogridpack=nogridpack),
+            ]
+        )
 
 
 class TreeMakerCMSSW(qondor.cmssw.CMSSW):
