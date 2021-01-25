@@ -66,11 +66,9 @@ def svj_filename(step, physics):
     return rootfile
 
 
-def madgraph_tarball_filename(physics, max_events=1):
+def madgraph_tarball_filename(physics):
     """Returns the basename of a MadGraph tarball for the given physics"""
-    return svj_filename(
-        "step0_GRIDPACK", Physics(physics, max_events=max_events)
-    ).replace(".root", ".tar.xz")
+    return svj_filename("step0_GRIDPACK", physics).replace(".root", ".tar.xz")
 
 
 def download_madgraph_tarball(physics, dst=None):
