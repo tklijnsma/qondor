@@ -61,9 +61,9 @@ def svj_filename(step, physics):
     return rootfile
 
 
-def madgraph_tarball_filename(physics):
+def madgraph_tarball_filename(physics, part=1):
     """Returns the basename of a MadGraph tarball for the given physics"""
-    return svj_filename("step0_GRIDPACK", Physics(physics, part=None)).replace(
+    return svj_filename("step0_GRIDPACK", Physics(physics, part=part)).replace(
         ".root", ".tar.xz"
     )
 
@@ -225,6 +225,26 @@ class CMSSW(qondor.cmssw.CMSSW):
                 "cd {0}".format(self.svj_path),
                 gridpack_cmd(physics, nogridpack=nogridpack),
             ]
+        )
+
+    def make_madgraph_tarball(self, physics, part=1):
+        """
+        Runs the python to make the tarball
+        """
+        cmd = (
+            "python runMG.py"
+            " year={year}"
+            " madgraph=1"
+            " channel=s"
+            " outpre=step0_GRIDPACK"
+            " mMediator={mz:.0f}"
+            " mDark={mdark:.0f}"
+            " rinv={rinv}".format(**physics)
+        )
+        self.run_commands(["cd {0}".format(self.svj_path), cmd])
+        return osp.join(
+            self.svj_path,
+            qondor.svj.madgraph_tarball_filename(Physics(physics, part=part)),
         )
 
 
