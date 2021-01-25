@@ -85,7 +85,9 @@ def download_madgraph_tarball(physics, dst=None):
             # Tarballs on SE will not have the boost tag and have postfix "_n-1"
             src = osp.join(
                 mg_tarball_path,
-                madgraph_tarball_filename(Physics(physics, boost=0.0, max_events=1)),
+                madgraph_tarball_filename(
+                    Physics(physics, boost=0.0, max_events=1, part=None)
+                ),
             )
             if seutils.isfile(src):
                 logger.info("Downloading %s --> %s", src, dst)
