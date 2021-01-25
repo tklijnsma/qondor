@@ -17,6 +17,7 @@ parser.add_argument('-v', '--verbose', action='store_true', help='Enable info ou
 parser.add_argument('--debug', action='store_true', help='Enable debug output')
 parser.add_argument('-c', '--cli', action='store_true', help='Force the job to be submitted by the condor_submit command line via a .jdl file')
 parser.add_argument('-n', '--njobsmax', type=int, help='Limit the number of jobs to be submitted to a number')
+parser.add_argument('--use-cache', action='store_true', help='Use the seutils cache to speed up repeated calls')
 
 # Parse once to find the index of the pythonfile argument
 # Every argument after the pythonfile argument is considered an argument for the runcode
@@ -36,7 +37,7 @@ def main():
     if args.debug:
         qondor.logger.setLevel(logging.DEBUG)
     if args.dry: qondor.drymode()
-    if not args.dry: seutils.use_cache()
+    if not args.dry and args.use_cache: seutils.use_cache()
     qondor.submit.submit_python_job_file(
         args.pythonfile,
         cli=args.cli, njobsmax=args.njobsmax, run_args=sysargs_for_runcode
