@@ -5,6 +5,7 @@ Module specific for the (boosted) svj analysis
 import logging
 import os
 import os.path as osp
+import pprint
 import subprocess
 
 import seutils
@@ -13,9 +14,10 @@ import qondor
 
 logger = logging.getLogger("qondor")
 
-MG_TARBALL_PATH = (
-    "root://cmseos.fnal.gov//store/user/lpcsusyhad/SVJ2017/boosted/mg_tarballs"
-)
+MG_TARBALL_PATHS = [
+    "root://cmseos.fnal.gov//store/user/lpcsusyhad/SVJ2017/boosted/mg_tarballs",
+    "root://cmseos.fnal.gov//store/user/lpcsusyhad/SVJ2017/boosted/mg_tarballs_2021",
+]
 
 
 class Physics(dict):
@@ -42,6 +44,9 @@ class Physics(dict):
             else "_n-{0}".format(self["max_events"])
         )
 
+    def __repr__(self):
+        return pprint.pformat(dict(self))
+
 
 def svj_filename(step, physics):
     """
@@ -61,11 +66,11 @@ def svj_filename(step, physics):
     return rootfile
 
 
-def madgraph_tarball_filename(physics, part=1):
+def madgraph_tarball_filename(physics, max_events=1):
     """Returns the basename of a MadGraph tarball for the given physics"""
-    return svj_filename("step0_GRIDPACK", Physics(physics, part=part)).replace(
-        ".root", ".tar.xz"
-    )
+    return svj_filename(
+        "step0_GRIDPACK", Physics(physics, max_events=max_events)
+    ).replace(".root", ".tar.xz")
 
 
 def download_madgraph_tarball(physics, dst=None):
@@ -73,16 +78,25 @@ def download_madgraph_tarball(physics, dst=None):
     dst = osp.join(
         os.getcwd() if dst is None else dst, madgraph_tarball_filename(physics)
     )
-    # Tarballs on SE will not have the boost tag and have postfix "_n-1"
-    src = osp.join(
-        MG_TARBALL_PATH,
-        madgraph_tarball_filename(Physics(physics, boost=0.0, max_events=1)),
-    )
     if osp.isfile(dst):
         logger.info("File %s already exists", dst)
     else:
-        logger.info("Downloading %s --> %s", src, dst)
-        seutils.cp(src, dst)
+        for mg_tarball_path in MG_TARBALL_PATHS:
+            # Tarballs on SE will not have the boost tag and have postfix "_n-1"
+            src = osp.join(
+                mg_tarball_path,
+                madgraph_tarball_filename(Physics(physics, boost=0.0, max_events=1)),
+            )
+            if seutils.isfile(src):
+                logger.info("Downloading %s --> %s", src, dst)
+                seutils.cp(src, dst)
+                break
+        else:
+            raise Exception(
+                "Cannot download tarball {0} for Physics {1}".format(
+                    madgraph_tarball_filename(physics), physics
+                )
+            )
 
 
 def step_cmd(inpre, outpre, physics):
@@ -227,7 +241,7 @@ class CMSSW(qondor.cmssw.CMSSW):
             ]
         )
 
-    def make_madgraph_tarball(self, physics, part=1):
+    def make_madgraph_tarball(self, physics, max_events=1):
         """
         Runs the python to make the tarball
         """
@@ -244,7 +258,9 @@ class CMSSW(qondor.cmssw.CMSSW):
         self.run_commands(["cd {0}".format(self.svj_path), cmd])
         return osp.join(
             self.svj_path,
-            qondor.svj.madgraph_tarball_filename(Physics(physics, part=part)),
+            qondor.svj.madgraph_tarball_filename(
+                Physics(physics, max_events=max_events)
+            ),
         )
 
 
