@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import datetime
 import logging
+import math
 import os
 import os.path as osp
 import pprint
@@ -741,7 +742,16 @@ def iter_chunkify(mylist, n_chunks):
         yield [mylist[i] for i in indices]
 
 
-def chunkify(mylist, n_chunks):
+def chunkify(mylist, n_chunks=None, chunksize=None):
+    """
+    Must specify either n_chunks or chunksize. Returns chunks of mylist as a list.
+    """
+    if (n_chunks is None and chunksize is None) or (
+        n_chunks is not None and chunksize is not None
+    ):
+        raise Exception("Must specify either n_chunks or chunksize")
+    if chunksize is not None:
+        n_chunks = int(math.ceil(len(mylist) / float(chunksize)))
     return list(iter_chunkify(mylist, n_chunks))
 
 

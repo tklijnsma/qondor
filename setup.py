@@ -18,6 +18,7 @@ setup(
         "bin/qondor-resubmit",
         "bin/qondor-status",
         "bin/qondor-make-cmssw-tarball",
+        "bin/qondor-version",
     ],
     install_requires=["seutils"],
     include_package_data=True,
