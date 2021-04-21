@@ -242,7 +242,7 @@ def download_url_to_str(url):
     except ImportError:
         import urllib2
 
-        response = urllib2.urlopen("http://www.example.com/")
+        response = urllib2.urlopen(url)
         html = response.read()
     return html
 
@@ -267,13 +267,8 @@ def strip_comments(python_code):
 
 
 class DummyFile(object):
-    def __init__(self):
-        # self.text = ''
-        pass
 
     def write(self, text):
-        # logger.debug('Writing: %s', text.replace('\n','\\n'))
-        # self.text += text
         pass
 
 

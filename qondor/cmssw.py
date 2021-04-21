@@ -115,7 +115,6 @@ class CMSSW(object):
             else:
                 try:
                     logger.warning("Attempting to find scram_arch...")
-                    print(osp.basename(osp.normpath(osp.join(self.cmssw_src, ".."))))
                     self.scram_arch = qondor.get_arch(
                         osp.basename(osp.normpath(osp.join(self.cmssw_src, "..")))
                     )
@@ -218,10 +217,10 @@ class CMSSW(object):
         """
         Makes a tarball out of the CMSSW distribution of this class
         """
-        cmssw_path = osp.abspath(osp.join(self.cmssw_src, ".."))
+        cmssw_path = osp.realpath(osp.join(self.cmssw_src, ".."))
         # Determine location of the output tarball
         dst = osp.join(
-            osp.abspath(outdir),
+            osp.realpath(outdir),
             (
                 osp.basename(cmssw_path).strip("/")
                 + ("" if tag is None else "_" + tag)
@@ -238,6 +237,9 @@ class CMSSW(object):
         if exclude is None:
             exclude = []
         exclude.append("tmp")
+        if dst.startswith(cmssw_path):
+            logger.warning("Excluding destination tarball itself to avoid recursion")
+            exclude.append(osp.relpath(dst, cmssw_path))
         with qondor.utils.switchdir(osp.dirname(cmssw_path)):
             cmd = [
                 "tar",
