@@ -267,7 +267,6 @@ def strip_comments(python_code):
 
 
 class DummyFile(object):
-
     def write(self, text):
         pass
 

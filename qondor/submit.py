@@ -281,7 +281,6 @@ class Session(object):
         self.submittables = []
         self._njobs_submitted = 0
         self.htcondor_settings = get_default_sub(self.submission_time)
-        self.htcondor_settings["+QondorRundir"] = '"' + self.rundir + '"'
         self._fixed_cmsconnect_specific_settings = False
         # Storage for submitted jobs
         self.submitted = []
@@ -360,6 +359,11 @@ class Session(object):
                 njobsmax,
             )
             return
+        # These two lines here rather than in __init__, to allow self.rundir
+        # to be overwritten in the submission code without breaking things
+        self.rundir = osp.abspath(self.rundir)
+        self.htcondor_settings["+QondorRundir"] = '"' + self.rundir + '"'
+
         self._njobs_submitted += njobs
         qondor.utils.create_directory(self.rundir)
         cluster.rundir = self.rundir
