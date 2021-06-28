@@ -792,7 +792,7 @@ class Cluster(object):
                     [
                         "mkdir {0}".format(package),
                         "tar xf {0}.tar -C {0}".format(package),
-                        'pip install --install-option="--prefix=${{pip_install_dir}}" --no-cache-dir -e {0}/'.format(
+                        'pip install --install-option="--prefix=${{pip_install_dir}}" --no-cache-dir --no-use-pep517 -e {0}/'.format(
                             package
                         ),
                     ]
@@ -800,7 +800,7 @@ class Cluster(object):
             else:
                 # Non-editable install from pypi
                 sh.append(
-                    'pip install --install-option="--prefix=${{pip_install_dir}}" --no-cache-dir {0}'.format(
+                    'pip install --install-option="--prefix=${{pip_install_dir}}" --no-cache-dir --no-use-pep517 {0}'.format(
                         package
                     )
                 )
