@@ -47,7 +47,7 @@ TIMESTAMP_FMT = "%Y%m%d_%H%M%S"
 
 import seutils
 
-from . import cmssw, resubmit, schedd, svj, utils
+from . import cmssw, resubmit, schedd, svj, utils, cmsconnect
 from .cmssw import CMSSW
 from .cmssw_releases import get_arch
 from .submit import get_first_cluster
