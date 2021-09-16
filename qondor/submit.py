@@ -7,6 +7,7 @@ import pprint
 import re
 import shutil
 from datetime import datetime
+from collections import OrderedDict
 
 import seutils
 
@@ -80,6 +81,9 @@ class StopProcessing(Exception):
     """
 
     pass
+
+# Session: pips, run_args, n_jobs_max, cli, htcondor settings, environment variables
+# Cluster: scope, environment variables
 
 
 def submit_python_job_file(
@@ -166,102 +170,160 @@ def get_first_cluster(filename):
     return submit_python_job_file(filename, return_first_cluster=True)
 
 
-# _____________________________________________________________________
-# Submission interface:
-# Deals with building submission dicts and submitting them to htcondor
-
-# Run environments: Currently just two options (sl6 and sl7)
-RUN_ENVS = {
-    "sl7-py27": [
-        'export pipdir="/cvmfs/sft.cern.ch/lcg/releases/pip/19.0.3-06476/x86_64-centos7-gcc7-opt"',
-        'export SCRAM_ARCH="slc7_amd64_gcc820"',
-        "source /cvmfs/sft.cern.ch/lcg/contrib/gcc/7/x86_64-centos7/setup.sh",
-        "source /cvmfs/sft.cern.ch/lcg/releases/LCG_95/ROOT/6.16.00/x86_64-centos7-gcc7-opt/ROOT-env.sh",
-        'export PATH="${pipdir}/bin:${PATH}"',
-        'export PYTHONPATH="${pipdir}/lib/python2.7/site-packages/:${PYTHONPATH}"',
-        'pip(){ ${pipdir}/bin/pip "$@"; }  # To avoid any local pip installations',
-    ],
-    "sl6-py27": [
-        'export pipdir="/cvmfs/sft.cern.ch/lcg/releases/pip/19.0.3-06476/x86_64-slc6-gcc7-opt"',
-        'export SCRAM_ARCH="slc6_amd64_gcc700"',
-        "source /cvmfs/sft.cern.ch/lcg/contrib/gcc/7/x86_64-slc6-gcc7-opt/setup.sh",
-        "source /cvmfs/sft.cern.ch/lcg/releases/LCG_95/ROOT/6.16.00/x86_64-slc6-gcc7-opt/ROOT-env.sh",
-        'export PATH="${pipdir}/bin:${PATH}"',
-        'export PYTHONPATH="${pipdir}/lib/python2.7/site-packages/:${PYTHONPATH}"',
-        'pip(){ ${pipdir}/bin/pip "$@"; }  # To avoid any local pip installations',
-    ],
-    "centos7-py36": [
-        "source /cvmfs/sft.cern.ch/lcg/views/LCG_96python3/x86_64-centos7-gcc8-opt/setup.sh",
-    ],
-}
 
 
-def get_default_sub(submission_time=None):
+class Session(object):
     """
-    Returns the default submission dict (the equivalent of a .jdl file)
-    to be used by the submitter.
+    Over-arching object that stores settings global to the jobs,
+    e.g. htcondor settings, run environment, pip installations, etc.
     """
-    if submission_time is None:
-        submission_time = datetime.now()
-    sub = {
-        "universe": "vanilla",
-        "output": "out_$(Cluster)_$(Process).txt",
-        "error": "err_$(Cluster)_$(Process).txt",
-        "log": "log_$(Cluster)_$(Process).txt",
-        "should_transfer_files": "YES",
-        "environment": {
-            "QONDOR_BATCHMODE": "1",
-            "CONDOR_CLUSTER_NUMBER": "$(Cluster)",
-            "CONDOR_PROCESS_ID": "$(Process)",
-            "CLUSTER_SUBMISSION_TIMESTAMP": submission_time.strftime(
-                qondor.TIMESTAMP_FMT
-            ),
-        },
-    }
-    # Try to set some more things
-    try:
-        sub["x509userproxy"] = os.environ["X509_USER_PROXY"]
-    except KeyError:
+
+    def __init__(self, name=None, rundir=None):
+        self.submission_time = datetime.now()
+        # Make a central run directory in which job files will appear;
+        # prefer `rundir` argument over a potentially supplied `name` argument,
+        # but always force the user to at least supply some hint as to what
+        # the directory name should be.
+        if rundir is None and name is None:
+            raise ValueError('Initialize Session as Session(name) or Session(rundir="path/")')
+        elif rundir:
+            self.rundir = rundir
+        else:
+            self.rundir = osp.abspath(
+                "qondor_{}_{}".format(name, self.submission_time.strftime(qondor.TIMESTAMP_FMT))
+            )
+
+        self.python_code = None
+        self.transfer_files = []
+        self.pips = []
+        self.environment_variables = []
+        # For htcondor settings, set some reasonable default settings
+        self.htcondor_settings = OrderedDict(
+            universe = "vanilla",
+            output = "out_$(Cluster)_$(Process).txt",
+            error = "err_$(Cluster)_$(Process).txt",
+            log = "log_$(Cluster)_$(Process).txt",
+            should_transfer_files = "YES",
+            environment = {
+                "QONDOR_BATCHMODE": "1",
+                "CONDOR_CLUSTER_NUMBER": "$(Cluster)",
+                "CONDOR_PROCESS_ID": "$(Process)",
+                "CLUSTER_SUBMISSION_TIMESTAMP": self.submission_time.strftime(qondor.TIMESTAMP_FMT),
+            },
+        )
+        if "USER" in os.environ: self.htcondor_settings["environment"]["USER"] = os.environ["USER"]
+        self._x509userproxy_heuristic()
+
+
+    def _x509userproxy_heuristic(self):
+        """
+        Tries to supply the grid proxy as an htcondor setting;
+        Warns upon failure.
+        """
+        # Try to set some more things
         try:
-            sub["x509userproxy"] = qondor.utils.run_command(
-                ["voms-proxy-info", "-path"]
-            )[0].strip()
-            logger.info(
-                'Set x509userproxy to "%s" based on output from voms-proxy-info',
-                sub["x509userproxy"],
-            )
-        except Exception:
-            logger.warning(
-                "Could not find a x509userproxy to pass; manually "
-                "set the htcondor variable 'x509userproxy' if your "
-                "htcondor setup requires it."
-            )
-    try:
-        sub["environment"]["USER"] = os.environ["USER"]
-    except KeyError:
-        # No user specified, no big deal
-        pass
+            self.htcondor_settings["x509userproxy"] = os.environ["X509_USER_PROXY"]
+        except KeyError:
+            try:
+                self.htcondor_settings["x509userproxy"] = qondor.utils.run_command(
+                    ["voms-proxy-info", "-path"]
+                )[0].strip()
+                logger.info(
+                    'Set x509userproxy to "%s" based on output from voms-proxy-info',
+                    self.htcondor_settings["x509userproxy"],
+                )
+            except Exception:
+                logger.warning(
+                    "Could not find a x509userproxy to pass; manually "
+                    "set the htcondor variable 'x509userproxy' if your "
+                    "htcondor setup requires it."
+                )
+
+
+
+class Job(object):
+    """
+    Container for settings that differ per job
+    """
+    def __init__(self, scope=None, njobs=1):
+        self.scope = {} if scope is None else scope
+        self.njobs = njobs
+
+
+
+def submit_pythonbindings(jobs, session=None, njobsmax=None):
+    qondor.utils.check_proxy()
+    import htcondor
+
+    if njobsmax is None: njobsmax = 1e7
+    n_jobs_summed = sum([job.njobs for job in jobs])
+    n_jobs_total = min(n_jobs_summed, njobsmax)
+    logger.info("Submitting all jobs; %s out of %s", n_jobs_total, n_jobs_summed)
+    schedd = qondor.schedd.get_best_schedd()
+    n_jobs_todo = n_jobs_total
+
+    if session is None: session = Session('nameless')
+    qondor.utils.create_directory(session.rundir)
+
+    ads = []
+    returnable = []
+    with qondor.utils.switchdir(session.rundir):
+        with qondor.schedd._transaction(schedd) as transaction:
+            submit_object = htcondor.Submit()
+            session_sub = compile_session_submission_dict(session)
+            for job in jobs:
+                sub = compile_submission_dict(session_sub, job)
+                njobs = min(job.njobs, n_jobs_todo)
+                n_jobs_todo -= njobs
+                # Load the dict into the submit object
+                for key in sub:
+                    if key.lower() == 'environment':
+                        submit_object[key] = qondor.schedd.format_env_htcondor(sub[key])
+                    else:
+                        submit_object[key] = sub[key]
+                new_ads = []
+                # Here the actual call to the htcondor python bindings to schedule this submission
+                cluster_id = (
+                    int(submit_object.queue(transaction, njobs, new_ads))
+                    if not qondor.DRYMODE
+                    else 0
+                )
+                logger.warning(
+                    "Submitted %s jobs for i_cluster %s (%s) to htcondor cluster %s",
+                    len(new_ads) if not qondor.DRYMODE else njobs,
+                    sub["environment"]["QONDORICLUSTER"],
+                    sub["environment"]["QONDORCLUSTERNAME"],
+                    cluster_id,
+                )
+                ads.extend(new_ads)
+                returnable.append(
+                    (
+                        sub,
+                        cluster_id,
+                        len(new_ads),
+                        [ad["ProcId"] for ad in new_ads],
+                    )
+                )
+                if n_jobs_todo == 0:
+                    break
+
+    logger.info(
+        "Summary: Submitted %s jobs to cluster %s", n_jobs_total, cluster_id
+    )
+    return returnable
+
+
+def compile_session_submission_dict(session):
+    sub = session.htcondor_settings.copy()
+    sub["transfer_input_files"] = ",".join(session.transfer_files)
+    # TODO: sub["executable"] is probably session level, not cluster level?
     return sub
 
+def compile_submission_dict(session_sub, job):
+    sub = session_sub.copy()
+    sub["environment"]["QONDORICLUSTER"] = str(cluster.i_cluster)
+    
 
-def update_sub(sub, other):
-    """
-    Merges a submission dict, attempting not to overwrite some keys but rather append them
-    """
-    # First copy all
-    r = dict(sub, **other)
-    # Merge some things more carefully:
-    # Environment
-    r["environment"] = dict(sub.get("environment", {}), **other.get("environment", {}))
-    # Input files
-    files = []
-    if "transfer_input_files" in sub:
-        files += sub["transfer_input_files"].split(",")
-    if "transfer_input_files" in other:
-        files += other["transfer_input_files"].split(",")
-    if files:
-        r["transfer_input_files"] = ",".join(files)
-    return r
 
 
 class Session(object):
@@ -276,14 +338,14 @@ class Session(object):
             "{}_{}".format(name, self.submission_time.strftime(qondor.TIMESTAMP_FMT))
         )
         self.transfer_files = []
-        self._created_python_module_tarballs = {}
-        self._i_seutils_tarball = 0
         self.submittables = []
-        self._njobs_submitted = 0
         self.htcondor_settings = get_default_sub(self.submission_time)
+
+        self._submitted = []
+        self._njobs_submitted = 0
+        self._created_python_module_tarballs = {}
         self._fixed_cmsconnect_specific_settings = False
-        # Storage for submitted jobs
-        self.submitted = []
+
 
     def htcondor(self, key, value):
         """
@@ -454,7 +516,7 @@ class Session(object):
                         cluster_id,
                     )
                     ads.extend(new_ads)
-                    self.submitted.append(
+                    self._submitted.append(
                         (
                             sub_orig,
                             cluster_id,
@@ -541,7 +603,7 @@ class Session(object):
                         range(njobs_assigned, njobs_assigned + njobs_thissub)
                     )  # Build the list of proc_ids
                     njobs_assigned += njobs_thissub
-                    self.submitted.append((sub, cluster_id, njobs_assigned, proc_ids))
+                    self._submitted.append((sub, cluster_id, njobs_assigned, proc_ids))
 
     def submit(self, cli, *args, **kwargs):
         """
@@ -564,7 +626,7 @@ class Session(object):
                 # 'submittables' : self.submittables,
                 "njobsmax": njobsmax,
                 "cli": cli,
-                "submitted": self.submitted,
+                "submitted": self._submitted,
             }
             submission_jsonfile = osp.join(
                 self.rundir, "submission_{}.json".format(submission_timestamp)
@@ -577,263 +639,4 @@ class Session(object):
             )
         # Clear the submittables
         self.submittables = []
-        self.submitted = []
-
-
-class Cluster(object):
-
-    ICLUSTER = 0
-    NAMES = set()
-
-    def __init__(
-        self,
-        runcode,
-        scope=None,
-        env=None,
-        pips=None,
-        htcondor=None,
-        run_args=None,
-        run_env="sl7-py27",
-        rundir=".",
-        session=None,
-        transfer_files=None,
-        **kwargs
-    ):
-        self.i_cluster = self.__class__.ICLUSTER
-        self.__class__.ICLUSTER += 1
-        self.rundir = rundir
-        self.runcode = runcode
-        self.env = {} if env is None else env
-        self.scope = {} if scope is None else scope
-        self.htcondor = {} if htcondor is None else htcondor
-        self.run_args = run_args
-        if qondor.utils.is_string(run_env):
-            run_env = RUN_ENVS[run_env]
-        self.run_env = run_env
-        self.transfer_files = {}
-        if transfer_files:
-            for f in transfer_files:
-                self._add_transfer_file_str_or_tuple(f)
-        self.session = session
-        # Try to use a more human-readable name if it's given
-        if "name" not in kwargs:
-            self.name = "cluster{}".format(self.i_cluster)
-        else:
-            # If the name was already used before, append a number to it until it's unique
-            name = kwargs["name"]
-            if name in self.NAMES:
-                name += "{}"
-                i_attempt = 0
-                while name.format(i_attempt) in self.NAMES:
-                    i_attempt += 1
-                name = name.format(i_attempt)
-            self.__class__.NAMES.add(name)
-            self.name = name
-        logger.info("Using name %s", self.name)
-        # Base filenames needed for the job
-        self.runcode_filename = "{}.py".format(self.name)
-        self.sh_entrypoint_filename = "{}.sh".format(self.name)
-        self.scope_filename = "{}.json".format(self.name)
-        # Process pip packages
-        self.pips = []
-        pips = [] if pips is None else pips
-
-        def check_if_in_pips(package):
-            """Checks if a package is already in the list"""
-            package, _ = qondor.utils.pip_split_version(package)
-            for pip in pips:
-                if not qondor.utils.is_string(pip):
-                    pip = pip[0]
-                pip, _ = qondor.utils.pip_split_version(pip)
-                if pip == package:
-                    return True
-            return False
-
-        if not check_if_in_pips("qondor"):
-            pips.append(("qondor", "auto"))
-        if not check_if_in_pips("seutils"):
-            pips.append(("seutils", "auto"))
-        for pip in pips:
-            if qondor.utils.is_string(pip):
-                self.pips.append((pip, "auto"))
-            else:
-                self.pips.append((pip[0], pip[1]))
-        # Add addtional keywords to the scope
-        self.scope.update(kwargs)
-
-    def _add_transfer_file_str_or_tuple(self, t):
-        if qondor.utils.is_string(t):
-            self.add_transfer_file(t)
-        else:
-            key, value = t
-            self.add_transfer_file(value, key=key)
-
-    def add_transfer_file(self, filename, key=None):
-        """
-        Adds a file to the self.transfer_files dict in order for it to be transferred
-        """
-        filename = osp.abspath(osp.expanduser(filename))
-        if key is None:
-            key = osp.basename(filename)
-            # Make a unique key
-            if key in self.transfer_files:
-                key += "_{0}"
-                for i in range(100):
-                    if not key.format(i) in self.transfer_files:
-                        key = key.format(i)
-                        break
-                else:
-                    raise Exception("Could not make a unique key")
-        self.transfer_files[key] = filename
-
-    def runcode_to_file(self):
-        self.runcode_filename = osp.join(self.rundir, self.runcode_filename)
-        if osp.isfile(self.runcode_filename):
-            raise OSError("{} exists".format(self.runcode_filename))
-        self.transfer_files["runcode"] = self.runcode_filename
-        logger.info(
-            "Dumping python code for cluster %s to %s",
-            self.i_cluster,
-            self.runcode_filename,
-        )
-        if not (qondor.DRYMODE):
-            with open(self.runcode_filename, "w") as f:
-                f.write(self.runcode)
-
-    def sh_entrypoint_to_file(self):
-        self.sh_entrypoint_filename = osp.join(self.rundir, self.sh_entrypoint_filename)
-        if osp.isfile(self.sh_entrypoint_filename):
-            raise OSError("{} exists".format(self.sh_entrypoint_filename))
-        sh = self.parse_sh_entrypoint()
-        self.transfer_files["sh_entrypoint"] = self.sh_entrypoint_filename
-        logger.info(
-            "Dumping .sh entrypoint for cluster %s to %s",
-            self.i_cluster,
-            self.sh_entrypoint_filename,
-        )
-        if not (qondor.DRYMODE):
-            with open(self.sh_entrypoint_filename, "w") as f:
-                f.write(sh)
-
-    def scope_to_file(self):
-        self.scope_filename = osp.join(self.rundir, self.scope_filename)
-        if osp.isfile(self.scope_filename):
-            raise OSError("{} exists".format(self.scope_filename))
-        self.transfer_files["scope"] = self.scope_filename
-        self.env["QONDORSCOPEFILE"] = osp.basename(self.scope_filename)
-        # Some last-minute additions before sending to a file
-        self.scope["transfer_files"] = self.transfer_files
-        self.scope["pips"] = self.pips
-        logger.info(
-            "Dumping the following scope for cluster %s to %s:\n%s",
-            self.i_cluster,
-            self.scope_filename,
-            pprint.pformat(self.scope),
-        )
-        if not (qondor.DRYMODE):
-            with open(self.scope_filename, "w") as f:
-                json.dump(self.scope, f)
-
-    def parse_sh_entrypoint(self):
-        # Basic setup: Divert almost all output to the stderr, and setup cms scripts
-        sh = [
-            "#!/bin/bash",
-            "set -e",
-            'echo "hostname: $(hostname)"',
-            'echo "date:     $(date)"',
-            'echo "pwd:      $(pwd)"',
-            'echo "ls -al:"',
-            "ls -al",
-            'echo "Redirecting all output to stderr from here on out"',
-            "exec 1>&2",
-            "",
-            "export VO_CMS_SW_DIR=/cvmfs/cms.cern.ch/",
-            "source /cvmfs/cms.cern.ch/cmsset_default.sh",
-            "env > bare_env.txt",  # Save the environment before doing any other environment setup
-            "",
-        ]
-        # Set the runtime environment (typically sourcing scripts to get the right python/gcc/ROOT/etc.)
-        sh += self.run_env + [""]
-        # Set up a directory to install python packages in, and put on the path
-        # Currently requires $pipdir to be defined... might want to figure out something more clever
-        sh += [
-            "set -uxoE pipefail",
-            'echo "Setting up custom pip install dir"',
-            'HOME="$(pwd)"',
-            'export pip_install_dir="$(pwd)/install"',
-            'mkdir -p "${pip_install_dir}/bin"',
-            'mkdir -p "${pip_install_dir}/lib/python2.7/site-packages"',
-            'export PATH="${pip_install_dir}/bin:${PATH}"',
-            "export PYTHONVERSION=$(python -c \"import sys; print('{}.{}'.format(sys.version_info.major, sys.version_info.minor))\")",
-            'export PYTHONPATH="${pip_install_dir}/lib/python${PYTHONVERSION}/site-packages:${PYTHONPATH}"',
-            "",
-            "pip -V",
-            "which pip",
-            "",
-        ]
-        # `pip install` the required pip packages for the job
-        for package, install_instruction in self.pips:
-            package_name, version_stuff = qondor.utils.pip_split_version(
-                package.rstrip("/")
-            )
-            package_name = package_name.replace(".", "-")
-            package = package_name + version_stuff
-            if version_stuff:
-                install_instruction = (
-                    "pypi"  # Force download from pypi for a specific version
-                )
-            if install_instruction == "auto":
-                install_instruction = (
-                    "editable" if qondor.utils.dist_is_editable(package) else "pypi"
-                )
-            if install_instruction == "editable":
-                # Editable install: Manually give tarball, extract, and install
-                sh.extend(
-                    [
-                        "mkdir {0}".format(package),
-                        "tar xf {0}.tar -C {0}".format(package),
-                        'pip install --install-option="--prefix=${{pip_install_dir}}" --no-cache-dir --no-use-pep517 -e {0}/'.format(
-                            package
-                        ),
-                    ]
-                )
-            else:
-                # Non-editable install from pypi
-                sh.append(
-                    'pip install --install-option="--prefix=${{pip_install_dir}}" --no-cache-dir --no-use-pep517 {0}'.format(
-                        package
-                    )
-                )
-        # Make the actual python call to run the required job code
-        # Also echo the exitcode of the python command to a file, to easily check whether jobs succeeded
-        # First compile the command - which might take some command line arguments
-        python_cmd = "python {0}".format(osp.basename(self.runcode_filename))
-        if self.run_args:
-            # Add any arguments for the python script to this line
-            try:  # py3
-                from shlex import quote
-            except ImportError:  # py2
-                from pipes import quote
-            python_cmd += " " + " ".join([quote(s) for s in self.run_args])
-        sh += [
-            python_cmd,
-            'echo "$?" > exitcode_${QONDORCLUSTERNAME}_${CONDOR_CLUSTER_NUMBER}_${CONDOR_PROCESS_ID}.txt',  # Store the python exit code in a file
-            "",
-        ]
-        sh = "\n".join(sh)
-        logger.info(
-            "Parsed the following .sh entrypoint for cluster %s:\n%s",
-            self.i_cluster,
-            sh,
-        )
-        return sh
-
-    def submit(self, *args, **kwargs):
-        """
-        Like Session.submit(cluster, *args, **kwargs), but then initiated from the cluster object.
-        If session is not provided as a keyword argument, a clean session is started.
-        """
-        session = kwargs.pop(
-            "session", Session()
-        )  # Make new session if not set by keyword
-        session.submit(self, *args, **kwargs)
+        self._submitted = []
