@@ -87,79 +87,79 @@ class StopProcessing(Exception):
 
 
 def submit_python_job_file(
-    filename, cli=False, njobsmax=None, run_args=None, return_first_cluster=False
+    filename, cli=False, run_args=None, _njobsmax=None, _return_first_cluster=False
 ):
     """
-    Builds submission clusters from a python job file
+    Builds jobs from a python job file
     """
-    runcode, submitcode = split_runcode_submitcode_file(filename)
-    # Run the submitcode
-    # First create exec scope dict, with a few handy functions
-    _first_cluster_ptr = [None]
-    n_calls_to_submit_fn = [0]
+    python_code, submit_code = split_runcode_submitcode_file(filename)
+
+    _first_job_ptr = [None]
+    _njobs_to_submit = [0]
+
     session = Session(name=osp.basename(filename).replace(".py", ""))
-    # Place to store 'global' pip installs
-    pips = []
+    session.python_code = python_code
+    session.command_line_arguments = run_args
+
+    jobs = []
 
     def htcondor_setting(key, value):
         session.htcondor(key, value)
 
-    def pip_fn(package, install_instruction=None):
-        if install_instruction:
-            pips.append((package, install_instruction))
-        else:
-            pips.append(package)
+    def pip_install(package):
+        session.pips.append(package)
 
-    def submit_fn(*args, **kwargs):
-        kwargs.setdefault("session", session)
-        kwargs.setdefault("run_args", run_args)
-        kwargs["pips"] = kwargs.get("pips", []) + pips  # Add 'global' installs
-        njobs = kwargs.get("njobs", 1)
-        cluster = Cluster(runcode, *args, **kwargs)
-        if return_first_cluster:
-            _first_cluster_ptr[0] = cluster
+    def make_job(**scope):
+        njobs = scope.pop('njobs', 1)
+        job = Job(scope, njobs)
+        jobs.append(job)
+        _njobs_to_submit[0] += njobs
+        if _return_first_cluster:
+            _first_job_ptr[0] = cluster
             raise StopProcessing
-        session.add_submission(cluster, cli=cli, njobsmax=njobsmax, njobs=njobs)
-        n_calls_to_submit_fn[0] += 1
 
-    def submit_now_fn():
-        session.submit(cli, njobsmax=njobsmax)
+    def send_to_htcondor():
+        submit_via_pythonbindings(jobs, session=session, _njobsmax=_njobsmax)
+        jobs = []
 
     exec_scope = {
+        # Interactive functions
+        "submit": make_job,
+        "htcondor": htcondor_setting,
+        "pip": pip_install,
+        "submit_now": send_to_htcondor,
+        # Utility for the user
         "qondor": qondor,
         "session": session,
-        "htcondor": htcondor_setting,
-        "submit": submit_fn,
-        "pip": pip_fn,
-        "submit_now": submit_now_fn,
-        "runcode": runcode,
-        "run_args": run_args,
-        "cli": cli,
-        "njobsmax": njobsmax,
-        "return_first_cluster": return_first_cluster,
+        # Needed for functionality
+        "_njobsmax": _njobsmax,
+        "_return_first_cluster": _return_first_cluster,
     }
+
     logger.info("Running submission code now")
-    if return_first_cluster:
+
+    if _return_first_cluster:
+        # This special mode throws a StopProcessing exception on the first
+        # submit() call in the submit code. This is useful for local debugging
         try:
-            exec_wrapper(submitcode, exec_scope)
+            exec_wrapper(submit_code, exec_scope)
         except StopProcessing:
             pass
-        cluster = _first_cluster_ptr[0]
+        cluster = _first_job_ptr[0]
         if cluster is None:
             raise Exception("No cluster was submitted in the submit code")
         return cluster
     else:
-        exec_wrapper(submitcode, exec_scope)
+        exec_wrapper(submit_code, exec_scope)
         # Special case: There was no call to submit
         # Just submit 1 job in that case
-        if n_calls_to_submit_fn[0] == 0:
+        if _njobs_to_submit[0] == 0:
             logger.info(
                 "No calls to submit() were made in the submit code; submitting 1 job"
             )
-            cluster = Cluster(runcode, session=session, run_args=run_args, njobs=1)
-            session.add_submission(cluster, cli=cli, njobsmax=njobsmax, njobs=1)
+            jobs.append(Job())
         # Do a submit call in case it wasn't done yet (if submit_now was called in the submit code this is a no-op)
-        session.submit(cli, njobsmax=njobsmax)
+        send_to_htcondor()
 
 
 def get_first_cluster(filename):
@@ -167,9 +167,7 @@ def get_first_cluster(filename):
     Returns the first cluster that would be submitted if the python job file
     would be submitted
     """
-    return submit_python_job_file(filename, return_first_cluster=True)
-
-
+    return submit_python_job_file(filename, _return_first_cluster=True)
 
 
 class Session(object):
@@ -194,8 +192,10 @@ class Session(object):
             )
 
         self.python_code = None
+        self.command_line_arguments = None
         self.transfer_files = []
         self.pips = []
+        self.run_environment = ''
         self.environment_variables = []
         # For htcondor settings, set some reasonable default settings
         self.htcondor_settings = OrderedDict(
@@ -249,9 +249,149 @@ class Job(object):
         self.scope = {} if scope is None else scope
         self.njobs = njobs
 
+# has_version = any(c in package for c in ['<', '=', '>'])
 
 
-def submit_pythonbindings(jobs, session=None, njobsmax=None):
+
+
+
+# Run environments: Short cuts to bash snippets that set up some basic environments
+PRECONFIGURED_BASH_SNIPPETS = {
+    "sl7-py27": [
+        'export pipdir="/cvmfs/sft.cern.ch/lcg/releases/pip/19.0.3-06476/x86_64-centos7-gcc7-opt"',
+        'export SCRAM_ARCH="slc7_amd64_gcc820"',
+        "source /cvmfs/sft.cern.ch/lcg/contrib/gcc/7/x86_64-centos7/setup.sh",
+        "source /cvmfs/sft.cern.ch/lcg/releases/LCG_95/ROOT/6.16.00/x86_64-centos7-gcc7-opt/ROOT-env.sh",
+        'export PATH="${pipdir}/bin:${PATH}"',
+        'export PYTHONPATH="${pipdir}/lib/python2.7/site-packages/:${PYTHONPATH}"',
+        'pip(){ ${pipdir}/bin/pip "$@"; }  # To avoid any local pip installations',
+        ],
+    "sl6-py27": [
+        'export pipdir="/cvmfs/sft.cern.ch/lcg/releases/pip/19.0.3-06476/x86_64-slc6-gcc7-opt"',
+        'export SCRAM_ARCH="slc6_amd64_gcc700"',
+        "source /cvmfs/sft.cern.ch/lcg/contrib/gcc/7/x86_64-slc6-gcc7-opt/setup.sh",
+        "source /cvmfs/sft.cern.ch/lcg/releases/LCG_95/ROOT/6.16.00/x86_64-slc6-gcc7-opt/ROOT-env.sh",
+        'export PATH="${pipdir}/bin:${PATH}"',
+        'export PYTHONPATH="${pipdir}/lib/python2.7/site-packages/:${PYTHONPATH}"',
+        'pip(){ ${pipdir}/bin/pip "$@"; }  # To avoid any local pip installations',
+        ],
+    "sl7-py36": ["source /cvmfs/sft.cern.ch/lcg/views/LCG_96python3/x86_64-centos7-gcc8-opt/setup.sh"],
+}
+
+def parse_sh_entrypoint(environment):
+    # Basic setup: Divert almost all output to the stderr, and setup cms scripts
+    sh = [
+        "#!/bin/bash",
+        "set -e",
+        'echo "hostname: $(hostname)"',
+        'echo "date:     $(date)"',
+        'echo "pwd:      $(pwd)"',
+        'echo "ls -al:"',
+        "ls -al",
+        'echo "Redirecting all output to stderr from here on out"',
+        "exec 1>&2",
+        "",
+        "export VO_CMS_SW_DIR=/cvmfs/cms.cern.ch/",
+        "source /cvmfs/cms.cern.ch/cmsset_default.sh",
+        "env > bare_env.txt",  # Save the environment before doing any other environment setup
+        "",
+    ]
+
+    def setup_pip_installation_directory():
+        # Set up a directory to install python packages in, and put on the path
+        # Currently requires $pipdir to be defined... might want to figure out something more clever
+        sh += [
+            "set -uxoE pipefail",
+            'echo "Setting up custom pip install dir"',
+            'HOME="$(pwd)"',
+            'export pip_install_dir="$(pwd)/install"',
+            'export PATH="${pip_install_dir}/bin:${PATH}"',
+            "export PYTHONVERSION=$(python -c \"import sys; print('{}.{}'.format(sys.version_info.major, sys.version_info.minor))\")",
+            'export PYTHONPATH="${pip_install_dir}/lib/python${PYTHONVERSION}/site-packages:${PYTHONPATH}"',
+            'mkdir -p "${pip_install_dir}/bin"',
+            'mkdir -p "${pip_install_dir}/lib/python${PYTHONVERSION}/site-packages"',
+            "pip -V",
+            "which pip",
+        ]
+
+    # Figure out the environment the job should run in 
+    if qondor.utils.is_string(environment):
+        if environment.startswith('condapack:'):
+            conda_tarball = environment.replace('condapack:', '', 1)
+            sh += [
+                'tar -xzf {} -C my_env'.format(conda_tarball)
+                'source my_env/bin/activate'
+                'conda unpack'
+                ]
+        elif environment in PRECONFIGURED_BASH_SNIPPETS:
+            # Use one of the preconfigured bash scripts
+            sh += PRECONFIGURED_BASH_SNIPPETS[environment]
+            sh += setup_pip_installation_directory()
+        else:
+            raise ValueError(
+                'Cannot parse environment string "{}"; either pass one of the preconfigured'
+                ' environments as a string ({}), or pass a packed conda tarball.'
+                .format(environment, ', '.join(list(PRECONFIGURED_BASH_SNIPPETS.keys())))
+                )
+
+    # `pip install` the required pip packages for the job
+    for package, install_instruction in self.pips:
+        package_name, version_stuff = qondor.utils.pip_split_version(
+            package.rstrip("/")
+        )
+        package_name = package_name.replace(".", "-")
+        package = package_name + version_stuff
+        if version_stuff:
+            install_instruction = (
+                "pypi"  # Force download from pypi for a specific version
+            )
+        if install_instruction == "auto":
+            install_instruction = (
+                "editable" if qondor.utils.dist_is_editable(package) else "pypi"
+            )
+        if install_instruction == "editable":
+            # Editable install: Manually give tarball, extract, and install
+            sh.extend(
+                [
+                    "mkdir {0}".format(package),
+                    "tar xf {0}.tar -C {0}".format(package),
+                    'pip install --install-option="--prefix=${{pip_install_dir}}" --no-cache-dir --no-use-pep517 -e {0}/'.format(
+                        package
+                    ),
+                ]
+            )
+        else:
+            # Non-editable install from pypi
+            sh.append(
+                'pip install --install-option="--prefix=${{pip_install_dir}}" --no-cache-dir --no-use-pep517 {0}'.format(
+                    package
+                )
+            )
+    # Make the actual python call to run the required job code
+    # Also echo the exitcode of the python command to a file, to easily check whether jobs succeeded
+    # First compile the command - which might take some command line arguments
+    python_cmd = "python {0}".format(osp.basename(self.runcode_filename))
+    if self.run_args:
+        # Add any arguments for the python script to this line
+        try:  # py3
+            from shlex import quote
+        except ImportError:  # py2
+            from pipes import quote
+        python_cmd += " " + " ".join([quote(s) for s in self.run_args])
+    sh += [
+        python_cmd,
+        'echo "$?" > exitcode_${QONDORCLUSTERNAME}_${CONDOR_CLUSTER_NUMBER}_${CONDOR_PROCESS_ID}.txt',  # Store the python exit code in a file
+        "",
+    ]
+    sh = "\n".join(sh)
+    logger.info(
+        "Parsed the following .sh entrypoint for cluster %s:\n%s",
+        self.i_cluster,
+        sh,
+    )
+    return sh
+
+def submit_via_pythonbindings(jobs, session=None, njobsmax=None):
     qondor.utils.check_proxy()
     import htcondor
 
