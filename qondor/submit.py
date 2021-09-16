@@ -119,7 +119,7 @@ def submit_python_job_file(
         n_calls_to_submit_fn[0] += 1
 
     def submit_now_fn():
-        session.submit(cli, njobsmax=njobsmax)
+        return session.submit(cli, njobsmax=njobsmax)
 
     exec_scope = {
         "qondor": qondor,
@@ -578,6 +578,7 @@ class Session(object):
         # Clear the submittables
         self.submittables = []
         self.submitted = []
+        return submission
 
 
 class Cluster(object):
