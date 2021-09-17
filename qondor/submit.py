@@ -608,9 +608,32 @@ class Cluster(object):
         self.scope = {} if scope is None else scope
         self.htcondor = {} if htcondor is None else htcondor
         self.run_args = run_args
+
+        # Figure out the run environment
+        self._is_conda_pack = False
         if qondor.utils.is_string(run_env):
-            run_env = RUN_ENVS[run_env]
-        self.run_env = run_env
+            if run_env.startswith("condapack:"):
+                # Conda pack mode
+                conda_tarball = run_env.replace("condapack:", "", 1)
+                self.run_env = []
+                if seutils.has_protocol(conda_tarball):
+                    self.run_env.append("xrdcp {0} .".format(conda_tarball))
+                else:
+                    raise NotImplementedError(
+                        "transferable conda tarballs are not supported yet"
+                    )
+                self.run_env += [
+                    "mkdir -p my_env",
+                    "tar -xzf {0} -C my_env".format(osp.basename(conda_tarball)),
+                    "source my_env/bin/activate",
+                    "conda-unpack",
+                ]
+                self._is_conda_pack = True
+            elif run_env in RUN_ENVS:
+                self.run_env = RUN_ENVS[run_env]
+            else:
+                raise ValueError("Cannot interpret environment '{0}'".format(run_env))
+
         self.transfer_files = {}
         if transfer_files:
             for f in transfer_files:
@@ -755,23 +778,31 @@ class Cluster(object):
         ]
         # Set the runtime environment (typically sourcing scripts to get the right python/gcc/ROOT/etc.)
         sh += self.run_env + [""]
-        # Set up a directory to install python packages in, and put on the path
-        # Currently requires $pipdir to be defined... might want to figure out something more clever
-        sh += [
-            "set -uxoE pipefail",
-            'echo "Setting up custom pip install dir"',
-            'HOME="$(pwd)"',
-            'export pip_install_dir="$(pwd)/install"',
-            'mkdir -p "${pip_install_dir}/bin"',
-            'mkdir -p "${pip_install_dir}/lib/python2.7/site-packages"',
-            'export PATH="${pip_install_dir}/bin:${PATH}"',
-            "export PYTHONVERSION=$(python -c \"import sys; print('{}.{}'.format(sys.version_info.major, sys.version_info.minor))\")",
-            'export PYTHONPATH="${pip_install_dir}/lib/python${PYTHONVERSION}/site-packages:${PYTHONPATH}"',
-            "",
-            "pip -V",
-            "which pip",
-            "",
-        ]
+        sh += ["set -uxoE pipefail"]
+
+        if not self._is_conda_pack:
+            # Set up a directory to install python packages in, and put on the path
+            # Currently requires $pipdir to be defined... might want to figure out something more clever
+            sh += [
+                'echo "Setting up custom pip install dir"',
+                'HOME="$(pwd)"',
+                'export pip_install_dir="$(pwd)/install"',
+                'export PATH="${pip_install_dir}/bin:${PATH}"',
+                "export PYTHONVERSION=$(python -c \"import sys; print('{}.{}'.format(sys.version_info.major, sys.version_info.minor))\")",
+                'export PYTHONPATH="${pip_install_dir}/lib/python${PYTHONVERSION}/site-packages:${PYTHONPATH}"',
+                'mkdir -p "${pip_install_dir}/bin"',
+                'mkdir -p "${pip_install_dir}/lib/python${PYTHONVERSION}/site-packages"',
+                "",
+                "pip -V",
+                "which pip",
+                "",
+            ]
+
+        if self._is_conda_pack:
+            pip_install_options = "--no-cache-dir --no-use-pep517"
+        else:
+            pip_install_options = '--install-option="--prefix=${{pip_install_dir}}" --no-cache-dir --no-use-pep517'
+
         # `pip install` the required pip packages for the job
         for package, install_instruction in self.pips:
             package_name, version_stuff = qondor.utils.pip_split_version(
@@ -793,18 +824,12 @@ class Cluster(object):
                     [
                         "mkdir {0}".format(package),
                         "tar xf {0}.tar -C {0}".format(package),
-                        'pip install --install-option="--prefix=${{pip_install_dir}}" --no-cache-dir --no-use-pep517 -e {0}/'.format(
-                            package
-                        ),
+                        "pip install {1} -e {0}/".format(package, pip_install_options),
                     ]
                 )
             else:
                 # Non-editable install from pypi
-                sh.append(
-                    'pip install --install-option="--prefix=${{pip_install_dir}}" --no-cache-dir --no-use-pep517 {0}'.format(
-                        package
-                    )
-                )
+                sh.append("pip install {1} {0}".format(package, pip_install_options))
         # Make the actual python call to run the required job code
         # Also echo the exitcode of the python command to a file, to easily check whether jobs succeeded
         # First compile the command - which might take some command line arguments

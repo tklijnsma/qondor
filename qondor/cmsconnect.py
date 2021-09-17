@@ -1,5 +1,8 @@
 import logging
+import os
+
 logger = logging.getLogger("qondor")
+
 
 def cmsconnect_get_all_sites():
     """
