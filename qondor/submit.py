@@ -674,7 +674,7 @@ class Cluster(object):
             return False
 
         if not check_if_in_pips("qondor"):
-            pips.append(("qondor", "auto"))
+            pips.append(("qondor=={}".format(qondor.version), "auto"))
         if not check_if_in_pips("seutils"):
             pips.append(("seutils", "auto"))
         for pip in pips:
