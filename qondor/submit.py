@@ -623,6 +623,7 @@ class Cluster(object):
                         "transferable conda tarballs are not supported yet"
                     )
                 self.run_env += [
+                    'export PYTHONPATH=""',
                     "mkdir -p my_env",
                     "tar -xzf {0} -C my_env".format(osp.basename(conda_tarball)),
                     "source my_env/bin/activate",
