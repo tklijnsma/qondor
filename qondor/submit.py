@@ -578,7 +578,8 @@ class Session(object):
         # Clear the submittables
         self.submittables = []
         self.submitted = []
-        return submission
+        if not qondor.DRYMODE:
+            return submission
 
 
 class Cluster(object):
