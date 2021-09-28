@@ -803,7 +803,7 @@ class Cluster(object):
         if self._is_conda_pack:
             pip_install_options = "--no-cache-dir --no-use-pep517"
         else:
-            pip_install_options = '--install-option="--prefix=${{pip_install_dir}}" --no-cache-dir --no-use-pep517'
+            pip_install_options = '--install-option="--prefix=${pip_install_dir}" --no-cache-dir --no-use-pep517'
 
         # `pip install` the required pip packages for the job
         for package, install_instruction in self.pips:
