@@ -197,7 +197,6 @@ if os.environ.get("HOSTNAME", "").endswith("fnal.gov"):
             ["/usr/lib64/python2.6/site-packages", "/usr/lib64/python2.7/site-packages"]
         )
     schedd.GLOBAL_SCHEDDMAN_CLS = schedd.ScheddManagerFermiHTC
-    seutils.set_default_mgm("root://cmseos.fnal.gov")
 
 # Load the bare environment saved before doing any setup
 BARE_ENV = {}
