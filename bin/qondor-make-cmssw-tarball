@@ -25,7 +25,7 @@ def main():
     base = osp.basename(args.cmsswpath)
     cmssw = qondor.CMSSW(osp.join(args.cmsswpath, 'src'))
 
-    if seutils.has_protocol(args.out):
+    if seutils.path.has_protocol(args.out):
         tarball = cmssw.make_tarball(outdir='.', tag=args.tag, exclude=args.exclude)
         qondor.utils.check_proxy()
         if not args.dry: seutils.cp(tarball, args.out)

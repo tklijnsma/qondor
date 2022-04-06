@@ -203,7 +203,10 @@ BARE_ENV = {}
 if BATCHMODE and osp.isfile("bare_env.txt"):
     with open("bare_env.txt") as f:
         for line in f.readlines():
-            key, value = line.strip().split("=", 1)
+            line = line.strip()
+            if len(line) == 0 or '=' not in line:
+                continue
+            key, value = line.split("=", 1)
             BARE_ENV[key] = value
 
 # ___________________________________________________
@@ -250,7 +253,7 @@ def init_cmssw(tarball_key="cmssw_tarball", scram_arch=None, outdir=None):
     if osp.isfile(tarball_key):
         # A path to a local tarball was given
         cmssw_tarball = tarball_key
-    elif seutils.has_protocol(tarball_key):
+    elif seutils.path.has_protocol(tarball_key):
         # A path to a tarball on a storage element was given
         cmssw_tarball = tarball_key
     elif tarball_key in scope:

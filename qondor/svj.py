@@ -341,7 +341,7 @@ def init_cmssw(
     if osp.isfile(tarball_key):
         # A path to a local tarball was given
         cmssw_tarball = tarball_key
-    elif seutils.has_protocol(tarball_key):
+    elif seutils.path.has_protocol(tarball_key):
         # A path to a tarball on a storage element was given
         cmssw_tarball = tarball_key
     else:

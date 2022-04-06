@@ -41,7 +41,7 @@ class CMSSW(object):
 
     @classmethod
     def from_tarball(cls, tarball, scram_arch=None, outdir=None):
-        if seutils.has_protocol(tarball):
+        if seutils.path.has_protocol(tarball):
             logger.info("Tarball %s seems to be located remote; copying", tarball)
             dst = osp.abspath(osp.basename(tarball))
             if osp.isfile(dst):

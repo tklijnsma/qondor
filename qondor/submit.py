@@ -395,7 +395,7 @@ class Session(object):
         sub.update(cluster.htcondor)
         # Flatten files into a string, excluding files on storage elements
         transfer_files = self.transfer_files + [
-            f for f in cluster.transfer_files.values() if not seutils.has_protocol(f)
+            f for f in cluster.transfer_files.values() if not seutils.path.has_protocol(f)
         ]
         if len(transfer_files) > 0:
             sub["transfer_input_files"] = ",".join(transfer_files)
@@ -617,7 +617,7 @@ class Cluster(object):
                 # Conda pack mode
                 conda_tarball = run_env.replace("condapack:", "", 1)
                 self.run_env = []
-                if seutils.has_protocol(conda_tarball):
+                if seutils.path.has_protocol(conda_tarball):
                     self.run_env.append("xrdcp {0} .".format(conda_tarball))
                 else:
                     raise NotImplementedError(
