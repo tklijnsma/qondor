@@ -15,8 +15,8 @@ import qondor
 logger = logging.getLogger("qondor")
 
 MG_TARBALL_PATHS = [
-    "root://cmseos.fnal.gov//store/user/lpcsusyhad/SVJ2017/boosted/mg_tarballs",
-    "root://cmseos.fnal.gov//store/user/lpcsusyhad/SVJ2017/boosted/mg_tarballs_2021",
+    "root://cmseos.fnal.gov//store/user/lpcdarkqcd/boosted/mgtarballs/2020",
+    "root://cmseos.fnal.gov//store/user/lpcdarkqcd/boosted/mgtarballs/2021",
     "gsiftp://hepcms-gridftp.umd.edu//mnt/hadoop/cms/store/user/thomas.klijnsma/mgtarballs",
 ]
 

@@ -370,8 +370,8 @@ class Session(object):
         # Possibly create tarballs out of required python packages
         self.handle_python_package_tarballs(cluster)
         # Possibly create tarball for the seutils cache and include it in the job
-        if seutils.USE_CACHE:
-            cluster.transfer_files["seutils-cache"] = self.dump_seutils_cache()
+        # if seutils.USE_CACHE:
+        #     cluster.transfer_files["seutils-cache"] = self.dump_seutils_cache()
         # Dump cluster contents to file and build scope
         cluster.runcode_to_file()
         cluster.sh_entrypoint_to_file()

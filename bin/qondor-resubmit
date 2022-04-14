@@ -31,7 +31,7 @@ def main():
     if args.debug:
         qondor.logger.setLevel(logging.DEBUG)
     if args.dry: qondor.drymode()
-    if not args.dry and not args.no_cache: seutils.use_cache()
+    # if not args.dry and not args.no_cache: seutils.use_cache()
 
     resub = qondor.resubmit.build_resubmission(args.jsonfile)
     resub.print_jobs(only_failed=True)
