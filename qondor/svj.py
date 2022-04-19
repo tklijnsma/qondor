@@ -38,7 +38,7 @@ class Physics(dict):
 
     def boost_str(self):
         """Format string if boost > 0"""
-        return "_HT{0:.0f}".format(self["boost"]) if self["boost"] > 0.0 else ""
+        return "_PT{0:.0f}".format(self["boost"]) if self["boost"] > 0.0 else ""
 
     def max_events_str(self):
         return (
