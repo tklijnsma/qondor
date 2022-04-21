@@ -18,13 +18,14 @@ MG_TARBALL_PATHS = []
 
 def set_mgtarball_path(paths):
     global MG_TARBALL_PATHS
-    MG_TARBALL_PATHS = paths.copy()
+    MG_TARBALL_PATHS = paths
     qondor.logger.warning('MG tarball paths set to {}'.format([', '.join(MG_TARBALL_PATHS)]))
 
 def use_prel_mgtarballs():
     set_mgtarball_path([
         "root://cmseos.fnal.gov//store/user/lpcdarkqcd/boosted/mgtarballs/2020",
         "root://cmseos.fnal.gov//store/user/lpcdarkqcd/boosted/mgtarballs/2021",
+        "root://cmseos.fnal.gov//store/user/lpcdarkqcd/boosted/mgtarballs/2022PREL",
         ])
 
 def use_ul_mgtarballs():
