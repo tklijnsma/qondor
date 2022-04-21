@@ -14,13 +14,23 @@ import qondor
 
 logger = logging.getLogger("qondor")
 
-MG_TARBALL_PATHS = [
-    # "root://cmseos.fnal.gov//store/user/lpcdarkqcd/boosted/mgtarballs/2020",
-    # "root://cmseos.fnal.gov//store/user/lpcdarkqcd/boosted/mgtarballs/2021",
-    # "gsiftp://hepcms-gridftp.umd.edu//mnt/hadoop/cms/store/user/thomas.klijnsma/mgtarballs",
-    # UL:
-    'root://cmseos.fnal.gov//store/user/lpcdarkqcd/boosted/mgtarballs/2022UL',
-]
+MG_TARBALL_PATHS = []
+
+def set_mgtarball_path(paths):
+    global MG_TARBALL_PATHS
+    MG_TARBALL_PATHS = paths.copy()
+    qondor.logger.warning('MG tarball paths set to {}'.format([', '.join(MG_TARBALL_PATHS)]))
+
+def use_prel_mgtarballs():
+    set_mgtarball_path([
+        "root://cmseos.fnal.gov//store/user/lpcdarkqcd/boosted/mgtarballs/2020",
+        "root://cmseos.fnal.gov//store/user/lpcdarkqcd/boosted/mgtarballs/2021",
+        ])
+
+def use_ul_mgtarballs():
+    set_mgtarball_path([
+        'root://cmseos.fnal.gov//store/user/lpcdarkqcd/boosted/mgtarballs/2022UL',
+        ])
 
 
 class Physics(dict):
@@ -85,6 +95,7 @@ def download_madgraph_tarball(physics, dst=None):
     if osp.isfile(dst):
         logger.info("File %s already exists", dst)
     else:
+        if len(MG_TARBALL_PATHS) == 0: use_ul_mgtarballs()
         for mg_tarball_path in MG_TARBALL_PATHS:
             # Tarballs on SE will not have the boost tag and have postfix "_n-1"
             src = osp.join(
